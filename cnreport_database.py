@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from cnreport_models import (
     Base,
     EsIndexMeta,
-    LlmRule,
+    LlmRuleV2 as LlmRule,
     ReportDocument,
     ReportSection,
     ScriptRule,

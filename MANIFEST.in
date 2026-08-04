@@ -1,0 +1,2 @@
+include .env.example
+include README.md

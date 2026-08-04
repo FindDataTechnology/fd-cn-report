@@ -22,7 +22,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 
 import cnreport_database
-from cnreport_models import LlmRule, ScriptRule
+from cnreport_models import LlmRuleV2, ScriptRule
 from rules_models import LlmRuleModel, ScriptRuleModel
 
 logger = logging.getLogger(__name__)
@@ -45,12 +45,12 @@ def _session():
 
 
 def _read_rules() -> list[dict]:
-    """Read every ``llm_rules`` row as a pipeline rule dict (no caching)."""
+    """Read every ``llm_rules_v2`` row as a pipeline rule dict (no caching)."""
     rules: list[dict] = []
     with _session() as session:
         rows = (
-            session.query(LlmRule)
-            .order_by(LlmRule.module, LlmRule.subgroup, LlmRule.indicator)
+            session.query(LlmRuleV2)
+            .order_by(LlmRuleV2.taxonomy_code, LlmRuleV2.indicator)
             .all()
         )
         for row in rows:
@@ -59,9 +59,9 @@ def _read_rules() -> list[dict]:
 
 
 def _seed_from_json(rules_path: Path | str, *, clear: bool) -> int:
-    """Insert every rule from a JSON file into ``llm_rules`` (no cache touch).
+    """Insert every rule from a JSON file into ``llm_rules_v2`` (no cache touch).
 
-    ``clear`` first deletes all existing ``llm_rules`` rows. Returns the count
+    ``clear`` first deletes all existing ``llm_rules_v2`` rows. Returns the count
     inserted. Used by :func:`load_rules` (auto-seed on empty) and
     :func:`seed_rules_from_json` (fixture swap) — neither of which should
     recurse into :func:`invalidate_rules_cache`.
@@ -70,18 +70,19 @@ def _seed_from_json(rules_path: Path | str, *, clear: bool) -> int:
     rules = raw.get("rules", []) if isinstance(raw, dict) else raw
     with _session() as session:
         if clear:
-            session.query(LlmRule).delete()
+            session.query(LlmRuleV2).delete()
         for rule in rules:
-            session.add(LlmRule(**_json_rule_to_llm_columns(rule)))
+            session.add(LlmRuleV2(**_json_rule_to_llm_columns(rule)))
         session.commit()
     return len(rules)
 
 
 def load_rules() -> dict:
-    """Load and cache the indicator rule set from the ``llm_rules`` table.
+    """Load and cache the indicator rule set from the ``llm_rules_v2`` table.
 
-    Returns ``{"rules": [...]}`` where each rule dict is the pipeline's
-    existing shape (``name``, ``module``, ``applies_to``, ``source``, ...).
+    Returns ``{"rules": [...]}`` where each rule dict has the new taxonomy-based
+    shape (``name``, ``taxonomy_code``, ``document_type_codes``,
+    ``indicator_translations``, ``applies_to``, ...).
     Cached in-process; call :func:`invalidate_rules_cache` after a write.
 
     If the table is empty and the default seed JSON exists, auto-seeds from it
@@ -94,7 +95,7 @@ def load_rules() -> dict:
         return _RULES_CACHE
     rules = _read_rules()
     if not rules and DEFAULT_RULES_JSON.exists():
-        logger.info("llm_rules empty; auto-seeding from %s", DEFAULT_RULES_JSON)
+        logger.info("llm_rules_v2 empty; auto-seeding from %s", DEFAULT_RULES_JSON)
         _seed_from_json(DEFAULT_RULES_JSON, clear=False)
         rules = _read_rules()
     _RULES_CACHE = {"rules": rules}
@@ -147,20 +148,23 @@ def _document_type_of(rule: dict) -> str:
 
 
 def _json_rule_to_llm_columns(rule: dict) -> dict:
-    """Map one ``indicator_rules.json`` rule dict to LlmRule column values."""
+    """Map one ``indicator_rules.json`` rule dict to LlmRuleV2 column values."""
     return {
         "indicator": rule.get("name"),
-        "document_type": _document_type_of(rule),
-        "module": rule.get("module"),
-        "subgroup": rule.get("subgroup"),
+        "taxonomy_code": None,  # Will be set by migration mapping
+        "document_type_codes": json.dumps(_document_type_of(rule)),  # Single-element array for old schema
+        "indicator_zh": rule.get("name"),  # Default to Chinese
+        "indicator_en": None,  # To be filled by translation step
+        "indicator_ja": None,
+        "indicator_ko": None,
+        "applies_to": json.dumps(rule.get("applies_to")) if rule.get("applies_to") else None,
         "source_type": rule.get("source_type"),
         "extractor": rule.get("extractor"),
-        "applies_to": rule.get("applies_to"),
         "unit": rule.get("unit"),
         "period_type": rule.get("period_type"),
-        "value_range": rule.get("value_range"),
-        "source": rule.get("source"),
-        "aliases": rule.get("aliases") or [],
+        "value_range": json.dumps(rule.get("value_range")) if rule.get("value_range") else None,
+        "source": json.dumps(rule.get("source")) if rule.get("source") else None,
+        "aliases": json.dumps(rule.get("aliases") or []),
         "note": rule.get("note"),
         "direction": rule.get("direction"),
         "instruction": _derive_instruction(rule),
@@ -178,11 +182,11 @@ def migrate_from_json(
     rules_path: Path | str = DEFAULT_RULES_JSON,
     db_url: Optional[str] = None,
 ) -> dict:
-    """Idempotently seed ``llm_rules`` from a JSON rule file.
+    """Idempotently seed ``llm_rules_v2`` from a JSON rule file.
 
-    Upserts each rule by ``(indicator, document_type)``. Re-running over an
-    unchanged file inserts 0 rows and updates 0 rows (change-detected per
-    column). ``script_rules`` is untouched (no script rules exist in the JSON).
+    Upserts each rule by ``indicator``. Re-running over an unchanged file
+    inserts 0 rows and updates 0 rows (change-detected per column).
+    ``script_rules`` is untouched (no script rules exist in the JSON).
     Returns ``{"inserted": n, "updated": n, "unchanged": n, "total": n}``.
     """
     if db_url is not None:
@@ -197,15 +201,12 @@ def migrate_from_json(
         for rule in rules:
             cols = _json_rule_to_llm_columns(rule)
             existing = (
-                session.query(LlmRule)
-                .filter(
-                    LlmRule.indicator == cols["indicator"],
-                    LlmRule.document_type == cols["document_type"],
-                )
+                session.query(LlmRuleV2)
+                .filter(LlmRuleV2.indicator == cols["indicator"])
                 .first()
             )
             if existing is None:
-                session.add(LlmRule(**cols))
+                session.add(LlmRuleV2(**cols))
                 inserted += 1
                 continue
             changed = False
@@ -243,22 +244,38 @@ def seed_rules_from_json(rules_path: Path | str) -> dict:
 
 
 def _rule_dict_to_llm_columns(rule: dict) -> dict:
-    """Map a skill-produced rule dict (demand's field names) to LlmRule columns."""
+    """Map a skill-produced rule dict (demand's field names) to LlmRuleV2 columns."""
     instruction = rule.get("instruction") or _derive_instruction(rule)
     position = rule.get("position") or _derive_position(rule)
+    # Handle both old (single document_type) and new (document_type_codes array) formats
+    doc_type_codes = rule.get("document_type_codes") or []
+    if not doc_type_codes:
+        doc_types = rule.get("document_types") or []
+        if doc_types:
+            # Convert old document_types to new document_type_codes
+            doc_type_codes = doc_types  # They might already be in the new format
+        else:
+            doc_type = rule.get("document_type") or rule.get("report_type") or "年报"
+            doc_type_codes = [doc_type]
+    # Handle indicator translations
+    indicator_translations = rule.get("indicator_translations") or {}
+    indicator_name = rule.get("indicator") or rule.get("name")
     return {
-        "indicator": rule.get("indicator") or rule.get("name"),
-        "document_type": rule.get("document_type") or rule.get("report_type") or "年报",
-        "module": rule.get("module"),
-        "subgroup": rule.get("subgroup"),
+        "indicator": indicator_name,
+        "taxonomy_code": rule.get("taxonomy_code"),
+        "document_type_codes": json.dumps(doc_type_codes),
+        "indicator_zh": indicator_translations.get("zh") or indicator_name,
+        "indicator_en": indicator_translations.get("en"),
+        "indicator_ja": indicator_translations.get("ja"),
+        "indicator_ko": indicator_translations.get("ko"),
         "source_type": rule.get("source_type"),
         "extractor": rule.get("extractor"),
-        "applies_to": rule.get("applies_to"),
+        "applies_to": json.dumps(rule.get("applies_to")) if rule.get("applies_to") else None,
         "unit": rule.get("unit"),
         "period_type": rule.get("period_type"),
-        "value_range": rule.get("value_range"),
-        "source": rule.get("source"),
-        "aliases": rule.get("aliases") or [],
+        "value_range": json.dumps(rule.get("value_range")) if rule.get("value_range") else None,
+        "source": json.dumps(rule.get("source")) if rule.get("source") else None,
+        "aliases": json.dumps(rule.get("aliases") or []),
         "note": rule.get("note"),
         "direction": rule.get("direction"),
         "instruction": instruction,
@@ -285,7 +302,7 @@ def _rule_dict_to_script_columns(rule: dict) -> dict:
 
 
 def upsert_llm_rule(rule: dict) -> dict:
-    """Insert-or-update an LLM rule by ``(indicator, document_type)``.
+    """Insert-or-update an LLM rule by ``indicator``.
 
     Validates against :class:`rules_models.LlmRuleModel` first. Invalid input
     raises and writes nothing. Invalidates the read cache.
@@ -293,25 +310,28 @@ def upsert_llm_rule(rule: dict) -> dict:
     validated = LlmRuleModel.model_validate(rule)
     payload = validated.model_dump(exclude_none=False)
     cols = _rule_dict_to_llm_columns(payload)
-    # Minimal enforcement for industry-scoped document_types (cn/<industry>/...):
+    # Minimal enforcement for industry-scoped document_type_codes:
     # require an explicit non-empty instruction so the LLM has actionable guidance.
-    doc_type = str(cols.get("document_type") or "")
+    doc_type_codes = json.loads(cols.get("document_type_codes") or "[]")
     instruction = str(cols.get("instruction") or "").strip()
-    if doc_type.startswith("cn/") and not instruction:
-        raise ValueError("LLM rule instruction must be non-empty for industry-scoped document_type (cn/...)")
+    if any(code.startswith("cn/") for code in doc_type_codes) and not instruction:
+        raise ValueError("LLM rule instruction must be non-empty for industry-scoped document_type_code (cn/...)")
     with _session() as session:
+        # Find existing rule by indicator (since we deduplicated, one row per indicator)
         row = (
-            session.query(LlmRule)
-            .filter(
-                LlmRule.indicator == cols["indicator"],
-                LlmRule.document_type == cols["document_type"],
-            )
+            session.query(LlmRuleV2)
+            .filter(LlmRuleV2.indicator == cols["indicator"])
             .first()
         )
         if row is None:
-            row = LlmRule(**cols)
+            row = LlmRuleV2(**cols)
             session.add(row)
         else:
+            # Merge document_type_codes arrays
+            existing_codes = set(json.loads(row.document_type_codes or "[]"))
+            new_codes = set(doc_type_codes)
+            merged_codes = sorted(existing_codes | new_codes)
+            cols["document_type_codes"] = json.dumps(merged_codes)
             for key, val in cols.items():
                 setattr(row, key, val)
         session.commit()
@@ -388,3 +408,81 @@ def save_to_skill_scripts_dir(skill_name: str, payload: Any) -> Path:
     out_path = skill_dir / f"{skill_name}.json"
     out_path.write_text(text, encoding="utf-8")
     return out_path
+
+
+# ── taxonomy browsing and querying ────────────────────────────────
+
+
+def list_report_taxonomy(parent_code: Optional[str] = None) -> list[dict]:
+    """List all report taxonomy entries, optionally filtered by parent.
+
+    Returns list of taxonomy entries with multi-language labels.
+    """
+    from cnreport_models import ReportTaxonomy
+
+    with _session() as session:
+        q = session.query(ReportTaxonomy)
+        if parent_code is not None:
+            q = q.filter(ReportTaxonomy.parent_code == parent_code)
+        q = q.order_by(ReportTaxonomy.sort_order, ReportTaxonomy.code)
+        return [row.to_dict() for row in q.all()]
+
+
+def get_report_taxonomy(code: str) -> Optional[dict]:
+    """Get a single report taxonomy entry by code.
+
+    Returns the taxonomy entry with multi-language labels, or None if not found.
+    """
+    from cnreport_models import ReportTaxonomy
+
+    with _session() as session:
+        row = session.query(ReportTaxonomy).filter(ReportTaxonomy.code == code).first()
+        return row.to_dict() if row else None
+
+
+def get_report_taxonomy_children(code: str) -> list[dict]:
+    """Get all children of a report taxonomy node.
+
+    Returns list of child taxonomy entries.
+    """
+    return list_report_taxonomy(parent_code=code)
+
+
+def list_document_taxonomy(
+    parent_code: Optional[str] = None,
+    country: Optional[str] = None,
+) -> list[dict]:
+    """List all document taxonomy entries, optionally filtered.
+
+    Returns list of document taxonomy entries with multi-language labels.
+    """
+    from cnreport_models import DocumentTaxonomy
+
+    with _session() as session:
+        q = session.query(DocumentTaxonomy)
+        if parent_code is not None:
+            q = q.filter(DocumentTaxonomy.parent_code == parent_code)
+        if country is not None:
+            q = q.filter(DocumentTaxonomy.country == country)
+        q = q.order_by(DocumentTaxonomy.sort_order, DocumentTaxonomy.code)
+        return [row.to_dict() for row in q.all()]
+
+
+def get_document_taxonomy(code: str) -> Optional[dict]:
+    """Get a single document taxonomy entry by code.
+
+    Returns the document taxonomy entry with multi-language labels, or None if not found.
+    """
+    from cnreport_models import DocumentTaxonomy
+
+    with _session() as session:
+        row = session.query(DocumentTaxonomy).filter(DocumentTaxonomy.code == code).first()
+        return row.to_dict() if row else None
+
+
+def get_document_taxonomy_children(code: str) -> list[dict]:
+    """Get all children of a document taxonomy node.
+
+    Returns list of child document taxonomy entries.
+    """
+    return list_document_taxonomy(parent_code=code)

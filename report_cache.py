@@ -21,6 +21,14 @@ Stem scheme (see ``cache_key``):
 Env:
   CNREPORT_CACHE_DIR — override the cache directory
                        (default: ``mcp/fd-cn-report/.cache/reports/``)
+  CNREPORT_SAVE_DIR  — optional user-visible directory for PDF save
+                       (organized by stock_code: {save_dir}/{stock_code}/{stem}.pdf)
+  MINIO_UPLOAD_ENABLED — "true" to enable MinIO upload (default: disabled)
+  MINIO_ENDPOINT     — MinIO server endpoint (e.g., "localhost:9000")
+  MINIO_ACCESS_KEY   — MinIO access key (default: "minioadmin")
+  MINIO_SECRET_KEY   — MinIO secret key (default: "minioadmin")
+  MINIO_BUCKET       — MinIO bucket name (default: "fd-cn-reports")
+  MINIO_SECURE       — "true" for HTTPS (default: "false")
 
 No TTL — CNINFO annual reports are immutable once published. Use
 ``clear_cache`` for manual eviction.
@@ -35,6 +43,63 @@ from pathlib import Path
 from typing import Optional
 
 _DEFAULT_CACHE_DIR = Path(__file__).resolve().parent / ".cache" / "reports"
+
+
+def _save_local(raw: bytes, stem: str, stock_code: Optional[str] = None) -> None:
+    """Save PDF to user-visible local directory (opt-in via CNREPORT_SAVE_DIR).
+
+    Organized by stock_code when available: {save_dir}/{stock_code}/{stem}.pdf.
+    Falls back to flat layout when stock_code is None. No-op when env var unset.
+    """
+    save_dir_raw = os.environ.get("CNREPORT_SAVE_DIR", "").strip()
+    if not save_dir_raw:
+        return
+    save_dir = Path(save_dir_raw).expanduser()
+    save_dir.mkdir(parents=True, exist_ok=True)
+    if stock_code:
+        target_dir = save_dir / stock_code
+        target_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        target_dir = save_dir
+    pdf_path = target_dir / f"{stem}.pdf"
+    _atomic_write(pdf_path, raw)
+
+
+def _upload_minio(raw: bytes, object_key: str) -> None:
+    """Upload PDF to MinIO (opt-in via MINIO_UPLOAD_ENABLED=true).
+
+    Lazy-init the Minio client on first upload. Auto-create bucket if missing.
+    Non-critical: exceptions are caught and logged, never break the fetch flow.
+    """
+    if os.environ.get("MINIO_UPLOAD_ENABLED", "").lower() != "true":
+        return
+    endpoint = os.environ.get("MINIO_ENDPOINT", "").strip()
+    if not endpoint:
+        return
+    try:
+        from minio import Minio  # type: ignore[import-not-found]
+
+        access_key = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
+        secret_key = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
+        secure = os.environ.get("MINIO_SECURE", "false").lower() == "true"
+        bucket = os.environ.get("MINIO_BUCKET", "fd-cn-reports")
+
+        # Lazy-init client (not at import time)
+        if not hasattr(_upload_minio, "_client"):
+            _upload_minio._client = Minio(endpoint, access_key, secret_key, secure=secure)
+        client = _upload_minio._client
+
+        # Auto-create bucket if missing
+        if not client.bucket_exists(bucket):
+            client.make_bucket(bucket)
+
+        # Upload
+        import io
+        client.put_object(bucket, object_key, io.BytesIO(raw), len(raw))
+    except Exception as exc:
+        # Non-critical: log but don't break the fetch flow
+        import sys
+        print(f"[report_cache] MinIO upload failed: {exc}", file=sys.stderr)
 
 
 def cache_dir() -> Path:
@@ -137,6 +202,11 @@ def get_or_fetch(
     text, raw = T.fetch_source_with_bytes(source, fetcher)
     if raw is not None:
         _atomic_write(d / f"{stem}.pdf", raw)
+        _save_local(raw, stem, stock_code)  # local save (opt-in)
+        _upload_minio(raw, f"reports/{stem}.pdf")  # MinIO upload (opt-in)
+        _save_local(raw, stem, stock_code)  # opt-in local save
+        prefix = os.environ.get("MINIO_PREFIX", "reports/").strip()
+        _upload_minio(raw, f"{prefix}{stem}.pdf")  # opt-in MinIO upload
     _atomic_write(d / f"{stem}.txt", text.encode("utf-8"))
     try:
         outline = T.parse_outline(text)

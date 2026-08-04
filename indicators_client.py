@@ -153,10 +153,12 @@ def list_rules(
     module: Optional[str] = None,
     query: Optional[str] = None,
     company: Optional[str] = None,
+    taxonomy_code: Optional[str] = None,
 ) -> dict:
-    """Return rules grouped by module, optionally filtered.
+    """Return rules grouped by module or taxonomy, optionally filtered.
 
-    ``module`` filters to one module; unknown module returns an error dict.
+    ``module`` filters to one module (legacy); unknown module returns an error dict.
+    ``taxonomy_code`` filters to rules with a specific taxonomy_code or its children.
     ``query`` does a normalized substring match over name+aliases.
     ``company`` (ticker or name) filters to ``applicable_rules`` and includes
     the resolved ``{industry, sub_type}`` profile.
@@ -166,8 +168,12 @@ def list_rules(
     if company is not None:
         profile, rules = _applicable_for(company, rules)
 
-    modules = sorted({r.get("module", "") for r in rules})
-    if module is not None:
+    # Filter by taxonomy_code (new way)
+    if taxonomy_code is not None:
+        rules = [r for r in rules if r.get("taxonomy_code", "").startswith(taxonomy_code)]
+    # Filter by module (legacy way)
+    elif module is not None:
+        modules = sorted({r.get("module", "") for r in rules})
         if module not in modules:
             return {"error": f"unknown module: {module!r}", "available": modules}
         rules = [r for r in rules if r.get("module") == module]
@@ -180,20 +186,38 @@ def list_rules(
             or any(q in _normalize(a) for a in r.get("aliases", []))
         ]
 
-    # group by module then subgroup
-    groups: dict[str, dict[str, list[dict]]] = {}
-    for r in rules:
-        groups.setdefault(r.get("module", ""), {}).setdefault(
-            r.get("subgroup", ""), []
-        ).append(_summarize_rule(r))
+    # Group by taxonomy_code (new way) or module (legacy way)
+    if taxonomy_code is not None:
+        # Group by taxonomy_code
+        groups: dict[str, dict[str, list[dict]]] = {}
+        for r in rules:
+            tc = r.get("taxonomy_code", "uncategorized")
+            groups.setdefault(tc, {}).setdefault("", []).append(_summarize_rule(r))
 
-    result: dict[str, Any] = {
-        "groups": [
-            {"module": m, "subgroups": [{"subgroup": sg, "indicators": items} for sg, items in subs.items()]}
-            for m, subs in groups.items()
-        ],
-        "count": len(rules),
-    }
+        result: dict[str, Any] = {
+            "groups": [
+                {"taxonomy_code": tc, "indicators": items}
+                for tc, subs in groups.items()
+                for items in subs.values()
+            ],
+            "count": len(rules),
+        }
+    else:
+        # Group by module then subgroup (legacy way)
+        groups = {}
+        for r in rules:
+            groups.setdefault(r.get("module", ""), {}).setdefault(
+                r.get("subgroup", ""), []
+            ).append(_summarize_rule(r))
+
+        result = {
+            "groups": [
+                {"module": m, "subgroups": [{"subgroup": sg, "indicators": items} for sg, items in subs.items()]}
+                for m, subs in groups.items()
+            ],
+            "count": len(rules),
+        }
+
     if profile is not None:
         result["company_profile"] = profile
     return result
@@ -203,8 +227,10 @@ def _summarize_rule(r: dict) -> dict:
     return {
         "name": r.get("name"),
         "aliases": r.get("aliases", []),
-        "module": r.get("module"),
-        "subgroup": r.get("subgroup"),
+        "taxonomy_code": r.get("taxonomy_code"),
+        "document_type_codes": r.get("document_type_codes", []),
+        "module": r.get("module"),  # Legacy field
+        "subgroup": r.get("subgroup"),  # Legacy field
         "source_type": r.get("source_type"),
         "extractor": r.get("extractor"),
         "applies_to": r.get("applies_to"),
@@ -478,17 +504,67 @@ _FORM_COMPAT_KEY: dict[str, str] = {
     "港股年度报告": "港股年度报告",
 }
 
+# New document_type format patterns (for old document_types array)
+_FORM_COMPAT_PATTERNS: dict[str, list[str]] = {
+    "年度报告": ["annual-report"],
+    "半年度报告": ["interim-report"],
+    "第一季度报告": ["quarterly-report"],
+    "第三季度报告": ["quarterly-report"],
+    "招股说明书": ["prospectus"],
+    "港股全球发售": ["hk-prospectus"],
+    "港股年度报告": ["hk-annual-report"],
+}
+
+# New taxonomy-based document_type_codes mapping
+_FORM_COMPAT_TAXONOMY: dict[str, list[str]] = {
+    "年度报告": ["cn_annual", "hk_annual", "hk_annual_report"],
+    "半年度报告": ["cn_interim", "hk_interim"],
+    "第一季度报告": ["cn_quarterly"],
+    "第三季度报告": ["cn_quarterly"],
+    "招股说明书": ["cn_prospectus", "hk_prospectus"],
+    "港股全球发售": ["hk_prospectus"],
+    "港股年度报告": ["hk_annual_report", "hk_annual"],
+}
+
 
 def _form_compatible(rule: dict, form: str) -> bool:
     """True if `rule` should be attempted for the given periodic `form`.
 
-    A rule without a `report_type` defaults to broadly applicable (treated as
-    present in every form) — this covers hand-authored rules that pre-date the
-    CSV `report_type` column. Otherwise the form's compat key (e.g. `年报`)
-    must be a substring of the rule's `report_type` (e.g. `年报/半年报/季报`).
-    Unknown `form` values default to compatible so callers passing raw category
-    codes don't accidentally suppress extraction.
+    A rule without a `report_type`, `document_type_codes`, or `document_types`
+    defaults to broadly applicable (treated as present in every form) — this
+    covers hand-authored rules that pre-date the CSV `report_type` column.
+    Otherwise the form's compat key must match at least one of the rule's
+    document types. Unknown `form` values default to compatible so callers
+    passing raw category codes don't accidentally suppress extraction.
     """
+    # Check new taxonomy-based document_type_codes first
+    doc_type_codes = rule.get("document_type_codes") or []
+    if doc_type_codes:
+        # Match against taxonomy codes
+        taxonomy_codes = _FORM_COMPAT_TAXONOMY.get(form, [])
+        if taxonomy_codes:
+            # Compatible if any document_type_code matches
+            return any(code in doc_type_codes for code in taxonomy_codes)
+        # If no mapping for this form, default to compatible
+        return True
+
+    # Check old document_types array (backward compatibility)
+    doc_types = rule.get("document_types") or []
+    if doc_types:
+        # Try new pattern format first (e.g., "annual-report")
+        patterns = _FORM_COMPAT_PATTERNS.get(form, [])
+        if patterns:
+            # Compatible if any document_type contains any pattern
+            return any(pattern in dt for dt in doc_types for pattern in patterns)
+
+        # Fall back to old key format (e.g., "年报")
+        key = _FORM_COMPAT_KEY.get(form)
+        if key is None:
+            return True
+        # Compatible if any document_type contains the key
+        return any(key in dt for dt in doc_types)
+
+    # Fall back to old report_type field for backward compatibility
     rt = rule.get("report_type")
     if not rt:
         return True

@@ -229,6 +229,94 @@ def check_catalog_and_special():
         cninfo_client._post_json = _orig_post
 
 
+def check_local_save():
+    """Test CNREPORT_SAVE_DIR local file save (opt-in)."""
+    import report_cache
+    import cnreport_tools as T
+
+    save_dir = os.path.join(_TMP, "local_save")
+    os.environ["CNREPORT_SAVE_DIR"] = save_dir
+
+    _orig_fetch = T.fetch_source_with_bytes
+    T.fetch_source_with_bytes = lambda *_a, **_kw: (
+        "第三节 管理层讨论与分析\n经营情况良好。\n",
+        b"%PDF fake local save test",
+    )
+    try:
+        # Clear cache to force a miss
+        report_cache.clear_cache()
+        text, info = report_cache.get_or_fetch(
+            "http://example.com/test.pdf",
+            stock_code="600519",
+            year=2023,
+            form="年度报告",
+            announcement_id="test123",
+        )
+        assert "经营情况良好" in text
+        stem = info["stem"]
+        # Check local save: {save_dir}/{stock_code}/{stem}.pdf
+        expected_path = Path(save_dir) / "600519" / f"{stem}.pdf"
+        assert expected_path.exists(), f"local save missing: {expected_path}"
+        assert expected_path.read_bytes() == b"%PDF fake local save test"
+        print("  ✓ local save: CNREPORT_SAVE_DIR → {save_dir}/{stock_code}/{stem}.pdf")
+    finally:
+        T.fetch_source_with_bytes = _orig_fetch
+        del os.environ["CNREPORT_SAVE_DIR"]
+
+
+def check_minio_upload():
+    """Test MinIO upload (opt-in, mocked)."""
+    import report_cache
+    import cnreport_tools as T
+
+    os.environ["MINIO_UPLOAD_ENABLED"] = "true"
+    os.environ["MINIO_ENDPOINT"] = "localhost:9000"
+    os.environ["MINIO_ACCESS_KEY"] = "test"
+    os.environ["MINIO_SECRET_KEY"] = "test"
+    os.environ["MINIO_BUCKET"] = "test-bucket"
+    os.environ["MINIO_SECURE"] = "false"
+
+    # Mock minio.Minio to avoid real network call
+    import sys
+    from unittest.mock import MagicMock
+    mock_minio = MagicMock()
+    mock_minio.Minio.return_value.bucket_exists.return_value = True  # bucket exists
+    sys.modules["minio"] = mock_minio
+
+    _orig_fetch = T.fetch_source_with_bytes
+    T.fetch_source_with_bytes = lambda *_a, **_kw: (
+        "第三节 管理层讨论与分析\n经营情况良好。\n",
+        b"%PDF fake minio test",
+    )
+    try:
+        # Clear cache to force a miss
+        report_cache.clear_cache()
+        # Clear the lazy-init client
+        if hasattr(report_cache._upload_minio, "_client"):
+            delattr(report_cache._upload_minio, "_client")
+        text, info = report_cache.get_or_fetch(
+            "http://example.com/test2.pdf",
+            stock_code="000001",
+            year=2023,
+            form="年度报告",
+            announcement_id="test456",
+        )
+        assert "经营情况良好" in text
+        # Check MinIO was called
+        assert mock_minio.Minio.called, "Minio client not created"
+        assert mock_minio.Minio.return_value.put_object.called, "put_object not called"
+        call_args = mock_minio.Minio.return_value.put_object.call_args
+        assert call_args[0][0] == "test-bucket"
+        assert call_args[0][1].startswith("reports/")
+        print("  ✓ MinIO upload: MINIO_UPLOAD_ENABLED=true → put_object called")
+    finally:
+        T.fetch_source_with_bytes = _orig_fetch
+        for key in ["MINIO_UPLOAD_ENABLED", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY",
+                    "MINIO_SECRET_KEY", "MINIO_BUCKET", "MINIO_SECURE"]:
+            os.environ.pop(key, None)
+        del sys.modules["minio"]
+
+
 def check_official_sources():
     """Non-failing live-endpoint ping for official-website datasource clients.
 
@@ -279,6 +367,10 @@ def main():
     check_company_api()
     print("catalog + special-report checks:")
     check_catalog_and_special()
+    print("local-save checks:")
+    check_local_save()
+    print("MinIO-upload checks:")
+    check_minio_upload()
     print("official-source checks:")
     check_official_sources()
     print("\nALL SELF-CHECKS PASSED")

@@ -18,14 +18,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LlmRuleModel(BaseModel):
-    """Validated LLM rule for persistence to ``llm_rules``."""
+    """Validated LLM rule for persistence to ``llm_rules_v2``."""
 
     model_config = ConfigDict(extra="allow")
 
     indicator: str = Field(..., min_length=1, description="indicator name (Chinese)")
     instruction: str = Field(default="", description="LLM extraction instruction")
     position: str = Field(default="", description="section position / selectors")
-    document_type: str = Field(..., min_length=1, description="report type, e.g. 年报")
+
+    # New taxonomy-based fields
+    taxonomy_code: Optional[str] = Field(None, description="taxonomy code, e.g. balance_sheet.current_assets")
+    document_type_codes: list[str] = Field(default_factory=list, description="list of document type codes, e.g. ['cn_annual']")
+    indicator_translations: Optional[dict[str, str]] = Field(None, description="multi-language indicator names")
+
+    # Legacy field for backward compatibility
+    document_type: Optional[str] = Field(None, min_length=1, description="report type, e.g. 年报 (legacy)")
 
     module: Optional[str] = None
     subgroup: Optional[str] = None
@@ -40,12 +47,19 @@ class LlmRuleModel(BaseModel):
     note: Optional[str] = None
     direction: Optional[str] = None
 
-    @field_validator("indicator", "document_type")
+    @field_validator("indicator")
     @classmethod
-    def _non_empty(cls, v: str) -> str:
+    def _non_empty_indicator(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("must be non-empty")
         return v.strip()
+
+    @field_validator("document_type")
+    @classmethod
+    def _non_empty_document_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and (not v or not v.strip()):
+            raise ValueError("must be non-empty")
+        return v.strip() if v else v
 
 
 class ScriptRuleModel(BaseModel):

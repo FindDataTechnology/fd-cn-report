@@ -22,9 +22,11 @@ test_fixtures/
 # macOS
 .DS_Store
 
-# Env / secrets
-.env
-.env.local
+# Env / secrets (keep credentials private!)
+.env                    # Default configuration (use .env.example as template)
+.env.local              # Local overrides with sensitive data (API keys, etc.)
+.env.localOverrides     # Additional local overrides
+*.local.env            # Any other local env files
 
 # Database
 daas.db

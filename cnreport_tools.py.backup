@@ -754,39 +754,20 @@ def llm_config() -> dict:
 
 
 def call_llm_json(system: str, user: str, max_retries: int = 3) -> str:
-    """Call LLM with JSON response format.
-    
-    Supports multiple providers via LiteLLM:
-    - OpenAI: "gpt-4o", "gpt-3.5-turbo"
-    - Anthropic: "claude-3-opus", "claude-3-sonnet"
-    - DeepSeek: "deepseek-v4-flash", "deepseek-chat"
-    - Azure: "azure/gpt-4o"
-    - Local: "ollama/llama3.1", "huggingface/..."
-    
-    Uses PDF_PROCESS_MODEL env var if set, otherwise falls back to LLM_MODEL.
+    """Call the OpenAI-compatible chat/completions endpoint, return raw content.
+
+    Retries on transient connection errors (OpenRouter free tier and other
+    shared upstreams often drop the connection mid-stream).
     """
-    # Try to use the new LiteLLM adapter
-    try:
-        from llm_adapter import call_llm_json as _call_llm_json
-        return _call_llm_json(system=system, user=user, max_retries=max_retries)
-    except ImportError:
-        # Fall back to original implementation if adapter not available
-        pass
-    
-    # Original implementation (fallback)
     import httpx
     import time
 
     cfg = llm_config()
     if not cfg["api_key"]:
         raise RuntimeError("LLM_API_KEY is not configured")
-    
-    # Use PDF_PROCESS_MODEL if available
-    model = os.environ.get("PDF_PROCESS_MODEL") or cfg["model"]
-    
     url = cfg["base_url"] + "/chat/completions"
     payload = {
-        "model": model,
+        "model": cfg["model"],
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},

@@ -1,0 +1,11 @@
+{
+  "input_rules": 482,
+  "valid_rules": 482,
+  "invalid_rules": 0,
+  "unique_signatures": 482,
+  "output_rules": 482,
+  "reduction_percent": 0.0,
+  "merged_groups": 0,
+  "max_merge": 0,
+  "template_candidates": 24
+}

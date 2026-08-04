@@ -5,72 +5,81 @@ and publishable to PyPI without the local mcp-models path dependency.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
 
-class LlmRule(Base):
-    """An LLM (non-script) indicator rule persisted in SQLite.
+class ReportTaxonomy(Base):
+    """Hierarchical classification of report content sections.
 
-    Mirrors the demand's LLM-rule shape (``indicator``, ``instruction``,
-    ``position``, ``document_type``) plus the metadata the extraction
-    pipeline already consumes (``module``, ``applies_to``, ``source``,
-    ...). Sourced from ``indicator_rules.json`` via the one-shot migration,
-    or written by the generator skills.
+    Stores taxonomy codes like "balance_sheet", "income_statement.revenue"
+    with multi-language labels (zh/en/ja/ko).
     """
-    __tablename__ = "llm_rules"
-    __table_args__ = (
-        UniqueConstraint("indicator", "document_type", name="uq_llm_rule_indicator_doc"),
-    )
+    __tablename__ = "report_taxonomy"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    indicator = Column(String(255), nullable=False, index=True)
-    document_type = Column(String(64), nullable=False, index=True)
-    module = Column(String(64), nullable=True, index=True)
-    subgroup = Column(String(255), nullable=True)
-    source_type = Column(String(32), nullable=True)
-    extractor = Column(String(64), nullable=True)
-    applies_to = Column(JSON, nullable=True)
-    unit = Column(String(32), nullable=True)
-    period_type = Column(String(32), nullable=True)
-    value_range = Column(JSON, nullable=True)
-    source = Column(JSON, nullable=True)
-    aliases = Column(JSON, nullable=True)
-    note = Column(Text, nullable=True)
-    direction = Column(String(32), nullable=True)
-    # demand's derived convenience fields
-    instruction = Column(Text, nullable=True)
-    position = Column(Text, nullable=True)
+    code = Column(String(100), unique=True, nullable=False, index=True)
+    parent_code = Column(String(100), nullable=True, index=True)
+    level = Column(Integer, nullable=False, default=1)
+    label_zh = Column(Text, nullable=False)
+    label_en = Column(Text, nullable=False)
+    label_ja = Column(Text, nullable=True)
+    label_ko = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
 
-    def to_rule_dict(self) -> dict:
-        """Reconstruct the in-memory rule dict the pipeline expects.
-
-        Maps DB ``indicator``→dict ``name`` and ``document_type``→dict
-        ``report_type`` so callers (``applicable_rules``, ``resolve_rule``,
-        ``_resolve_via_report``) see the same shape they got from
-        ``indicator_rules.json`` before the migration.
-        """
+    def to_dict(self) -> dict:
+        """Convert to dict for API responses."""
         return {
-            "name": self.indicator,
-            "indicator": self.indicator,
-            "document_type": self.document_type,
-            "report_type": self.document_type,
-            "module": self.module,
-            "subgroup": self.subgroup,
-            "source_type": self.source_type,
-            "extractor": self.extractor,
-            "applies_to": self.applies_to,
-            "unit": self.unit,
-            "period_type": self.period_type,
-            "value_range": self.value_range,
-            "source": self.source,
-            "aliases": self.aliases or [],
-            "note": self.note or "",
-            "direction": self.direction,
-            "instruction": self.instruction or "",
-            "position": self.position or "",
+            "code": self.code,
+            "parent_code": self.parent_code,
+            "level": self.level,
+            "label_zh": self.label_zh,
+            "label_en": self.label_en,
+            "label_ja": self.label_ja,
+            "label_ko": self.label_ko,
+            "description": self.description,
+        }
+
+
+class DocumentTaxonomy(Base):
+    """Hierarchical classification of document types.
+
+    Stores document type codes like "cn_annual", "hk_interim"
+    with multi-language labels and metadata (country, exchange, report_kind).
+    """
+    __tablename__ = "document_taxonomy"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(100), unique=True, nullable=False, index=True)
+    parent_code = Column(String(100), nullable=True, index=True)
+    level = Column(Integer, nullable=False, default=1)
+    label_zh = Column(Text, nullable=False)
+    label_en = Column(Text, nullable=False)
+    label_ja = Column(Text, nullable=True)
+    label_ko = Column(Text, nullable=True)
+    country = Column(String(10), nullable=True, index=True)
+    exchange = Column(String(20), nullable=True)
+    report_kind = Column(String(50), nullable=True)
+    description = Column(Text, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    def to_dict(self) -> dict:
+        """Convert to dict for API responses."""
+        return {
+            "code": self.code,
+            "parent_code": self.parent_code,
+            "level": self.level,
+            "label_zh": self.label_zh,
+            "label_en": self.label_en,
+            "label_ja": self.label_ja,
+            "label_ko": self.label_ko,
+            "country": self.country,
+            "exchange": self.exchange,
+            "report_kind": self.report_kind,
+            "description": self.description,
         }
 
 
@@ -118,6 +127,79 @@ class ScriptRule(Base):
             "source": self.source,
             "aliases": self.aliases or [],
             "note": self.note or "",
+        }
+
+
+class LlmRuleV2(Base):
+    """New taxonomy-based LLM rule model.
+
+    Uses taxonomy_code (FK to report_taxonomy) and document_type_codes (JSON array
+    of FKs to document_taxonomy) instead of free-text module/subgroup/document_type.
+    Supports multi-language indicator names.
+    """
+    __tablename__ = "llm_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    indicator = Column(String(255), nullable=False, index=True)
+    taxonomy_code = Column(String(100), nullable=True, index=True)
+    document_type_codes = Column(Text, nullable=True)  # JSON array of strings
+    indicator_zh = Column(Text, nullable=True)
+    indicator_en = Column(Text, nullable=True)
+    indicator_ja = Column(Text, nullable=True)
+    indicator_ko = Column(Text, nullable=True)
+    applies_to = Column(Text, nullable=True)  # JSON
+    extractor = Column(String(64), nullable=True)
+    source_type = Column(String(32), nullable=True)
+    unit = Column(String(32), nullable=True)
+    period_type = Column(String(32), nullable=True)
+    value_range = Column(Text, nullable=True)  # JSON
+    source = Column(Text, nullable=True)  # JSON
+    aliases = Column(Text, nullable=True)  # JSON
+    note = Column(Text, nullable=True)
+    direction = Column(String(32), nullable=True)
+    instruction = Column(Text, nullable=True)
+    position = Column(Text, nullable=True)
+
+    def to_rule_dict(self) -> dict:
+        """Convert to rule dict for pipeline compatibility."""
+        import json
+
+        # Parse JSON fields
+        doc_type_codes = json.loads(self.document_type_codes) if self.document_type_codes else []
+        applies_to = json.loads(self.applies_to) if self.applies_to else None
+        value_range = json.loads(self.value_range) if self.value_range else None
+        source = json.loads(self.source) if self.source else None
+        aliases = json.loads(self.aliases) if self.aliases else []
+
+        # Build indicator_translations
+        indicator_translations = {}
+        if self.indicator_zh:
+            indicator_translations["zh"] = self.indicator_zh
+        if self.indicator_en:
+            indicator_translations["en"] = self.indicator_en
+        if self.indicator_ja:
+            indicator_translations["ja"] = self.indicator_ja
+        if self.indicator_ko:
+            indicator_translations["ko"] = self.indicator_ko
+
+        return {
+            "name": self.indicator,
+            "indicator": self.indicator,
+            "taxonomy_code": self.taxonomy_code,
+            "document_type_codes": doc_type_codes,
+            "indicator_translations": indicator_translations,
+            "applies_to": applies_to,
+            "extractor": self.extractor,
+            "source_type": self.source_type,
+            "unit": self.unit,
+            "period_type": self.period_type,
+            "value_range": value_range,
+            "source": source,
+            "aliases": aliases,
+            "note": self.note or "",
+            "direction": self.direction,
+            "instruction": self.instruction or "",
+            "position": self.position or "",
         }
 
 
