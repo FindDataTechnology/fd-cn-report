@@ -115,6 +115,24 @@ def rules_hash(rules: Optional[list[dict]] = None) -> str:
     return h.hexdigest()[:16]
 
 
+def _subgroup_rules_hash(module: str, subgroup: str) -> str:
+    """Stable hash over ALL rules in a (module, subgroup), independent of the
+    requested subset.
+
+    Used as the section-cache version key so different subsets of the same
+    section (e.g. one indicator per crawl request) share ONE cache entry and
+    accumulate records as a growing superset - instead of fragmenting into one
+    cache key per requested subset (which defeated cross-concept sharing and
+    forced a redundant LLM call per indicator over the same section text).
+    """
+    rs = [
+        r for r in _rules()
+        if r.get("module", "") == module
+        and (r.get("subgroup") or r.get("module", "")) == subgroup
+    ]
+    return rules_hash(rs)
+
+
 def _normalize(s: str) -> str:
     """Strip whitespace + common punctuation for tolerant Chinese name matching."""
     return re.sub(r"[\s　·、，,。.：:（）()\-_/]", "", (s or ""))
@@ -269,6 +287,12 @@ def _company_profile_from_lookup(stock_code: str, name: str = "") -> dict:
 def applies_to(rule: dict, profile: dict, stock_code: str) -> bool:
     """Evaluate a rule's ``applies_to`` against a company profile + ticker."""
     ap = rule.get("applies_to") or {}
+    # Rule storage bug: some rows have applies_to as a string ("null") instead of dict.
+    # Defensive: if it's a string, treat it as "*" (no filter).
+    if isinstance(ap, str):
+        if ap in ("*", "null", "None"):
+            return True
+        return False
     industry = ap.get("industry", "*")
     if industry not in ("*", profile.get("industry", "unknown")):
         return False
@@ -315,6 +339,11 @@ def _to_json_val(v: Any) -> Any:
     if isinstance(v, Decimal):
         return float(v)
     return v
+
+
+# Pydantic model metadata fields (per indicators_models.model_to_json_schema)
+# that are NOT indicators and must be excluded from the section cache records.
+_META_FIELDS = {"section", "page", "source"}
 
 
 def _value_obj(
@@ -418,6 +447,13 @@ def _resolve_section(
     import cnreport_tools as T
 
     src = rule.get("source") or {}
+    # Rule storage bug: source is a JSON string, not a dict. Parse it defensively.
+    if isinstance(src, str):
+        try:
+            import json
+            src = json.loads(src)
+        except Exception:
+            src = {}
     selectors = src.get("selectors") or []
     # Fallback: use subgroup as a single selector when no explicit selectors exist.
     if not selectors and rule.get("subgroup"):
@@ -526,6 +562,45 @@ _FORM_COMPAT_TAXONOMY: dict[str, list[str]] = {
     "港股年度报告": ["hk_annual_report", "hk_annual"],
 }
 
+# Normalize abbreviation codes (from rules' document_type_codes strings) to taxonomy codes.
+_ABBREV_TO_TAXONOMY: dict[str, list[str]] = {
+    "年报": ["cn_annual"],
+    "半年报": ["cn_interim"],
+    "季报": ["cn_quarterly"],
+    "一季报": ["cn_quarterly"],
+    "三季报": ["cn_quarterly"],
+    "招股书": ["cn_prospectus"],
+    "招股说明书": ["cn_prospectus"],
+}
+
+
+def _normalize_doc_type_codes(raw) -> list[str]:
+    """Normalize document_type_codes to a list of taxonomy codes.
+
+    Handles three input formats:
+    - list of taxonomy codes (already normalized): ["cn_annual", "cn_interim"]
+    - list of abbreviations: ["年报", "半年报"]
+    - slash/comma-separated string of abbreviations: "年报/半年报/季报"
+    """
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        # Split slash/comma-separated string
+        parts = [p.strip() for p in raw.replace(",", "/").split("/") if p.strip()]
+    elif isinstance(raw, list):
+        parts = raw
+    else:
+        return []
+
+    result = []
+    for p in parts:
+        if p in _ABBREV_TO_TAXONOMY:
+            result.extend(_ABBREV_TO_TAXONOMY[p])
+        else:
+            # Assume it's already a taxonomy code
+            result.append(p)
+    return result
+
 
 def _form_compatible(rule: dict, form: str) -> bool:
     """True if `rule` should be attempted for the given periodic `form`.
@@ -538,15 +613,17 @@ def _form_compatible(rule: dict, form: str) -> bool:
     passing raw category codes don't accidentally suppress extraction.
     """
     # Check new taxonomy-based document_type_codes first
-    doc_type_codes = rule.get("document_type_codes") or []
-    if doc_type_codes:
-        # Match against taxonomy codes
-        taxonomy_codes = _FORM_COMPAT_TAXONOMY.get(form, [])
-        if taxonomy_codes:
-            # Compatible if any document_type_code matches
-            return any(code in doc_type_codes for code in taxonomy_codes)
-        # If no mapping for this form, default to compatible
-        return True
+    raw_codes = rule.get("document_type_codes")
+    if raw_codes:
+        doc_type_codes = _normalize_doc_type_codes(raw_codes)
+        if doc_type_codes:
+            # Match against taxonomy codes
+            taxonomy_codes = _FORM_COMPAT_TAXONOMY.get(form, [])
+            if taxonomy_codes:
+                # Compatible if any document_type_code matches
+                return any(code in doc_type_codes for code in taxonomy_codes)
+            # If no mapping for this form, default to compatible
+            return True
 
     # Check old document_types array (backward compatibility)
     doc_types = rule.get("document_types") or []
@@ -583,6 +660,13 @@ def _build_llm_system_prompt(
     known) and is report-type-agnostic: it does not assume a CN annual report
     and does not hard-code a year, so it applies to prospectus and HK report
     text as well as CN periodic reports.
+
+    ``expected_keys`` is intentionally NOT embedded in the prompt: it varies
+    per requested indicator subset, and baking it in would make the system
+    prompt diverge across subset calls on the SAME section, defeating provider
+    prefix caching of the (large, stable) section text. The requested keys are
+    stated in the user prompt tail instead. The parameter is retained for
+    signature compatibility.
     """
     period_hint = f" ({year})" if year else ""
     return (
@@ -591,7 +675,6 @@ def _build_llm_system_prompt(
         f"The text is from the section '{section_title}'. "
         f"The text may contain multiple periods of data. Return only the value for "
         f"the requested period{period_hint} as a single number, not a dict. "
-        f"Your response MUST be a JSON object with these exact keys: {expected_keys}. "
         "Match indicator names to text lines by financial meaning, not exact wording. "
         "Examples: '母公司股东'->'归属于母公司普通股股东的净利润', "
         "'业务及管理费'->'业务及管理费用', "
@@ -644,20 +727,57 @@ def _llm_extract_section(
     all_results: dict[str, dict] = {}
 
     for (module, subgroup), group_rules in by_group.items():
-        wanted_names = [r["name"] for r in group_rules]
-        model_cls = model_for_subgroup(module, subgroup, group_rules)
-        model_rh = rules_hash(group_rules)
-        # Build the LLM user prompt
+        # Subgroup-level hash: stable across requested subsets, so different
+        # callers asking for different indicators of the same section share ONE
+        # cache entry (a growing superset) instead of fragmenting per subset.
+        subgroup_rh = _subgroup_rules_hash(module, subgroup)
         snippet = section_text[:max_chars]
         section_title = section_key or module
+
+        # Cache lookup (when caller supplied pdf_url + section_key). The cache
+        # stores the union of records ever fetched for this section; a partial
+        # hit (some wanted indicators already present) is served from cache and
+        # only the MISSING indicators are queried from the LLM.
+        cached_by_norm: dict[str, dict] = {}
+        if pdf_url and section_key:
+            try:
+                _cached = LSC.get(pdf_url, section_key, period, subgroup_rh)
+            except Exception as e:
+                _cached = None
+                _log.debug("section cache read error: %s", e)
+            if _cached is not None:
+                for rec in _cached.get("records", []):
+                    nm = rec.get("indicator", "")
+                    if nm:
+                        cached_by_norm[LSC._normalize_name(nm)] = rec
+
+        missing_rules = [
+            r for r in group_rules
+            if LSC._normalize_name(r["name"]) not in cached_by_norm
+        ]
+
+        if not missing_rules:
+            # Full hit - no LLM call needed.
+            for r in group_rules:
+                rec = cached_by_norm.get(LSC._normalize_name(r["name"]))
+                all_results[r["name"]] = {
+                    "value": rec.get("value") if rec else None,
+                    "unit": r.get("unit", ""),
+                    "note": "llm-section-cache",
+                }
+            continue
+
+        # Partial or full miss - call the LLM for ONLY the missing indicators.
+        llm_names = [r["name"] for r in missing_rules]
+        model_cls = model_for_subgroup(module, subgroup, missing_rules)
         schema = model_to_json_schema(model_cls)
         field_descriptions = []
-        for nm in wanted_names:
+        for nm in llm_names:
             field_info = schema["schema"]["properties"].get(nm, {})
             desc = field_info.get("description", nm)
             field_descriptions.append(f"  - {nm}: {desc}")
 
-        expected_keys = json.dumps(wanted_names, ensure_ascii=False)
+        expected_keys = json.dumps(llm_names, ensure_ascii=False)
         system = _build_llm_system_prompt(section_title, period, year, expected_keys)
         user = (
             f"Financial section: {section_title}\n\n"
@@ -668,58 +788,56 @@ def _llm_extract_section(
             "Each value must be a single number or null."
         )
 
-        # Cache lookup (when caller supplied pdf_url + section_key)
-        _cached_raw = None
-        if pdf_url and section_key:
-            try:
-                _cached_raw = LSC.get(pdf_url, section_key, period, model_rh)
-            except Exception as e:
-                _log.debug("section cache read error: %s", e)
-
-        if _cached_raw is not None:
-            cached_names = {LSC._normalize_name(r.get("indicator", "")) for r in _cached_raw}
-            wanted_norm = {LSC._normalize_name(n) for n in wanted_names}
-            missing_norm = wanted_norm - cached_names
-            if not missing_norm:
-                # Full hit
-                for rec in _cached_raw:
-                    nm = rec.get("indicator", "")
-                    if LSC._normalize_name(nm) in wanted_norm:
-                        all_results[nm] = {
-                            "value": rec.get("value"),
-                            "unit": rec.get("unit") or "",
-                            "note": "llm-section-cache",
-                        }
-                for r in group_rules:
-                    if r["name"] not in all_results:
-                        all_results[r["name"]] = {"value": None, "unit": r.get("unit", ""), "note": "llm-section-cache: not returned"}
-                continue
-
-        # Call the LLM with the focused subgroup schema
         try:
             instance = T.call_llm_pydantic(system, user, model_cls)
         except RuntimeError as e:
+            # Cached hits still count; only the missing rules carry the error.
             for r in group_rules:
-                all_results[r["name"]] = {
-                    "value": None, "unit": r.get("unit", ""),
-                    "note": f"llm error: {e}",
-                }
+                rec = cached_by_norm.get(LSC._normalize_name(r["name"]))
+                if rec is not None:
+                    all_results[r["name"]] = {
+                        "value": rec.get("value"),
+                        "unit": r.get("unit", ""),
+                        "note": "llm-section-cache",
+                    }
+                else:
+                    all_results[r["name"]] = {
+                        "value": None, "unit": r.get("unit", ""),
+                        "note": f"llm error: {e}",
+                    }
             continue
 
         raw = instance.model_dump()
         if pdf_url and section_key:
             try:
-                records = [{"indicator": k, "value": v} for k, v in raw.items()]
-                LSC.put(pdf_url, section_key, period, model_rh, records)
+                # put() merges these fresh records into any existing superset.
+                # _to_json_val converts Decimal (from Pydantic) to float so the
+                # cache JSON is serializable and cached values match the LLM path.
+                # Skip model metadata fields (section/page/source) so only real
+                # indicators are cached.
+                records = [
+                    {"indicator": k, "value": _to_json_val(v)}
+                    for k, v in raw.items() if k not in _META_FIELDS
+                ]
+                LSC.put(pdf_url, section_key, period, subgroup_rh, records)
             except Exception as e:
                 _log.debug("section cache write error: %s", e)
 
+        # Merge: cached hits + fresh LLM results for the missing rules.
         for r in group_rules:
-            all_results[r["name"]] = {
-                "value": _to_json_val(raw.get(r["name"])),
-                "unit": r.get("unit", ""),
-                "note": "llm",
-            }
+            rec = cached_by_norm.get(LSC._normalize_name(r["name"]))
+            if rec is not None:
+                all_results[r["name"]] = {
+                    "value": rec.get("value"),
+                    "unit": r.get("unit", ""),
+                    "note": "llm-section-cache",
+                }
+            else:
+                all_results[r["name"]] = {
+                    "value": _to_json_val(raw.get(r["name"])),
+                    "unit": r.get("unit", ""),
+                    "note": "llm",
+                }
 
     return all_results
 
@@ -1279,6 +1397,16 @@ def extract_indicators(
         for nm in not_applicable:
             missing.append({"indicator": nm, "reason": "not applicable"})
 
+    # --- normalize source_type: rules with None source_type but a selectors-bearing
+    # source field are report rules (the DB migration didn't populate source_type).
+    for r in target_rules:
+        if r.get("source_type") is None:
+            src = r.get("source")
+            if isinstance(src, str) and "selectors" in src:
+                r["source_type"] = "report"
+            elif isinstance(src, dict) and src.get("selectors"):
+                r["source_type"] = "report"
+
     # --- akshare group: one network fetch per rule, run concurrently up to `cap` ---
     akshare_rules = [r for r in target_rules if r["source_type"] == "akshare"]
 
@@ -1297,7 +1425,9 @@ def extract_indicators(
         })
 
     # --- report group: group by resolved section, batch LLM per section ---
-    report_rules = [r for r in target_rules if r["source_type"] == "report"]
+    # Default None source_type -> report (rules with selectors are report rules;
+    # the source_type column is sparsely populated in the DB).
+    report_rules = [r for r in target_rules if (r["source_type"] or "report") == "report"]
     # resolve each rule's section first
     section_of: dict[str, str] = {}
     section_text_cache: dict[str, str] = {}
@@ -1329,7 +1459,7 @@ def extract_indicators(
             res = _run_extractor(section_text_cache[sec], r, "annual", "python", year=year)
             results[r["name"]] = _value_obj(
                 res.get("value"), rule=r, source=f"report:{sec}",
-                extractor=(r.get("extractor", "").startswith("python:") and r["extractor"] or "llm"),
+                extractor=((r.get("extractor") or "").startswith("python:") and r["extractor"] or "llm"),
                 period="annual", provenance=ctx.pdf_url, note=res.get("note", ""),
             )
             if res.get("value") is None and "skipped" in (res.get("note") or ""):

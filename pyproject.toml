@@ -1,6 +1,6 @@
 [project]
 name = "fd-cn-report"
-version = "0.3.0"
+version = "0.3.3"
 description = "Chinese financial report MCP server — 31 Shenwan industry AI rule system, outline extraction, AI structured extraction, Elasticsearch store + search, industry rules dashboard"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -53,10 +53,18 @@ py-modules = [
     "cninfo_client",
     "financials_client",
     "indicators_client",
+    "indicators_models",
     "script_extractors",
     "indicators_csv_migration",
     "report_cache",
+    "report_section_map",
     "llm_section_cache",
+    "llm_adapter",
+    "rules_db",
+    "rules_models",
+    "rules_skills",
+    "industry_coverage",
+    "industry_taxonomy",
     "selfcheck",
     "selfcheck_cache",
     "migrate",
@@ -69,4 +77,7 @@ py-modules = [
     "ministry_stats_client",
     "catalog",
 ]
+
+[tool.setuptools.package-data]
+"*" = ["indicator_rules.json", "indicator_rules_deduped.json", "docs/*.json"]
 

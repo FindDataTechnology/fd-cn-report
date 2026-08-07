@@ -198,6 +198,14 @@ def put(
                     continue
                 seen.add(norm)
                 ordered.append(existing_by_norm[norm])
+            # Append genuinely new records (indicators not previously cached)
+            # so the cache actually grows as a superset, not just updates
+            # existing rows. Without this, a partial-hit re-query for a new
+            # indicator was silently dropped on write.
+            for norm, rec in new_by_norm.items():
+                if norm not in seen:
+                    seen.add(norm)
+                    ordered.append(rec)
             merged = ordered
         meta = {
             "pdf_url": pdf_url,
