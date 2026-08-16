@@ -6,6 +6,29 @@ MCP server for Chinese financial reports — 31 申万 L1 industry AI rule syste
 outline extraction, AI structured extraction, Elasticsearch store + search,
 and interactive rules dashboard.
 
+## One-click install
+
+`fd-cn-report` auto-registers as a datasource when installed alongside
+`fd-open-data-mcp`. To install the **entire** finddata stack (hub + every
+datasource + ontology DB) in one go:
+
+```bash
+pip install "fd-open-data-mcp[data]" fd-polygon fd-cn-report
+
+fd-open-data-mcp migrate \
+  && fd-open-data-mcp import-catalog \
+  && fd-open-data-mcp consume-concepts \
+  && fd-open-data-mcp propose-bindings \
+  && fd-open-data-mcp seed-entities \
+  && fd-open-data-mcp generate-schedules \
+  && fd-open-data-mcp register-discovered
+
+fd-open-data-mcp serve
+```
+
+To run `fd-cn-report`'s own MCP server standalone (without the hub):
+`uv sync && uv run python server.py` — see [Setup](#setup) below.
+
 ## Industry Rules System
 
 **21,698 LLM rules** covering **31 申万 L1 industries** with per-section extraction

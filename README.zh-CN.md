@@ -5,6 +5,28 @@
 面向中国财务报告的 MCP 服务器 —— 覆盖 31 个申万 L1 行业的 AI 规则系统、
 目录提取、AI 结构化抽取、Elasticsearch 存储与检索，以及交互式规则看板。
 
+## 一键安装
+
+`fd-cn-report` 与 `fd-open-data-mcp` 同装时自动注册为数据源。一条命令安装
+**整个** finddata 栈（枢纽 + 全部数据源 + 本体数据库）：
+
+```bash
+pip install "fd-open-data-mcp[data]" fd-polygon fd-cn-report
+
+fd-open-data-mcp migrate \
+  && fd-open-data-mcp import-catalog \
+  && fd-open-data-mcp consume-concepts \
+  && fd-open-data-mcp propose-bindings \
+  && fd-open-data-mcp seed-entities \
+  && fd-open-data-mcp generate-schedules \
+  && fd-open-data-mcp register-discovered
+
+fd-open-data-mcp serve
+```
+
+脱离枢纽独立运行 `fd-cn-report` 自身的 MCP 服务器：
+`uv sync && uv run python server.py` —— 见下文[安装](#安装)。
+
 ## 行业规则系统
 
 **21,698 条 LLM 规则**，覆盖 **31 个申万 L1 行业**，每条规则记录某个指标在
