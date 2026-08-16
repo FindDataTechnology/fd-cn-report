@@ -1,5 +1,7 @@
 # fd-cn-report
 
+**English** | [中文](README.zh-CN.md)
+
 MCP server for Chinese financial reports — 31 申万 L1 industry AI rule system,
 outline extraction, AI structured extraction, Elasticsearch store + search,
 and interactive rules dashboard.
@@ -123,8 +125,11 @@ Features:
 | | `get_indicator` | One indicator's value |
 | | `extract_indicators` | All applicable indicators in one pass |
 | | `extract_indicators_by_position` | CSV-driven extraction |
-| | `extract_indicators_batch` | Batch concurrent extraction |
+| | `audit_rule_gaps` | Audit missing rules across industries/tickers |
 | **Dashboard** | `open_industry_rules_dashboard` | Start the rules web dashboard |
+
+> `extract_indicators_batch` is a **Python convenience function** (not an MCP
+> tool) — see [Concurrency](#concurrency).
 
 ## Typical Chain
 
@@ -378,6 +383,8 @@ CNINFO and akshare are **keyless**. Other tools need env vars in `.env`:
 | `ES_URL` (+ optional `ES_API_KEY` or `ES_USERNAME`/`ES_PASSWORD`) | `index_records`, `search_reports`, `delete_index` | Yes for ES |
 | `DAAS_DATABASE_URL` | provenance writes, rules storage | Defaults to `daas.db` |
 | `CNREPORT_CACHE_DIR` | report cache | Defaults to `.cache/reports/` |
+| `CNREPORT_SAVE_DIR` | user-visible PDF save directory | Optional |
+| `MINIO_UPLOAD_ENABLED` (+ `MINIO_ENDPOINT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET` / `MINIO_SECURE`) | PDF upload to MinIO object store | Optional |
 
 ## Architecture
 
