@@ -1,0 +1,62 @@
+name: docker-publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: fd-cn-report
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Harbor (HARBOR_HOST) serves HTTP, not HTTPS, so both the Docker daemon
+      # and the buildx builder must treat it as an insecure registry.
+      - name: Configure Docker daemon for insecure Harbor registry
+        run: |
+          echo "{\"insecure-registries\": [\"${{ secrets.HARBOR_HOST }}\"]}" | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          sleep 3
+
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.HARBOR_HOST }}
+          username: ${{ secrets.HARBOR_USER }}
+          password: ${{ secrets.HARBOR_PASS }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."${{ secrets.HARBOR_HOST }}"]
+              http = true
+
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Project `finddata` on the America Harbor; zihan pulls it through
+          # its registries.yaml `harbor.local` mirror.
+          images: ${{ secrets.HARBOR_HOST }}/finddata/${{ env.IMAGE_NAME }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+            type=ref,event=tag
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}

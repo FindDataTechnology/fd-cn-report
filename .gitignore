@@ -23,14 +23,18 @@ test_fixtures/
 .DS_Store
 
 # Env / secrets (keep credentials private!)
-.env                    # Default configuration (use .env.example as template)
-.env.local              # Local overrides with sensitive data (API keys, etc.)
-.env.localOverrides     # Additional local overrides
-*.local.env            # Any other local env files
+# NOTE: gitignore treats a trailing "# ..." as part of the pattern, so the
+# .env* patterns below must stay bare or they silently match nothing.
+.env
+.env.local
+.env.localOverrides
+*.local.env
 
 # Database
 daas.db
 *.db
+*.db-shm
+*.db-wal
 
 # Generated docs
 docs/industry_rule_generation_report.json

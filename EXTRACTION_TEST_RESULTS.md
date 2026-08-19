@@ -3,14 +3,14 @@
 ## ✅ Test Summary
 
 **Date**: 2026-08-02  
-**Model**: `openai/deepseek-v4-flash` via linjie.love  
+**Model**: `openai/deepseek-v4-flash` via a self-hosted OpenAI-compatible gateway  
 **Status**: ✅ **SUCCESS**
 
 ## Configuration
 
 ```bash
-LLM_BASE_URL=https://www.linjie.love/v1
-LLM_API_KEY=sk-***1izg
+LLM_BASE_URL=http://124.223.42.3:30080/v1
+LLM_API_KEY=sk-***
 LLM_MODEL=openai/deepseek-v4-flash
 PDF_PROCESS_MODEL=openai/deepseek-v4-flash
 ```
@@ -65,7 +65,7 @@ result = T.call_llm_json(system, user)
 1. `llm_adapter.py` - New LiteLLM adapter layer
 2. `cnreport_tools.py` - Updated to use adapter
 3. `pyproject.toml` - Added litellm dependency
-4. `.env.local` - Configuration for linjie.love API
+4. `.env.local` - Configuration for the OpenAI-compatible API
 
 ### Key Features
 - **Transparent fallback**: If LiteLLM unavailable, uses direct HTTP
@@ -80,7 +80,7 @@ result = T.call_llm_json(system, user)
 - Complex PDF extraction: ~10-30 seconds (depends on PDF size)
 
 ### Cost
-- Using DeepSeek via linjie.love: Very cost-effective
+- Using DeepSeek via self-hosted gateway: Very cost-effective
 - Alternative: Can switch to GPT-4o for higher quality (more expensive)
 
 ## Next Steps

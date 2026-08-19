@@ -27,7 +27,13 @@ from rules_models import LlmRuleModel, ScriptRuleModel
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RULES_JSON = Path(__file__).resolve().parent / "indicator_rules.json"
+# Allow the rules JSON to be located via env var (useful when fd-cn-report is
+# pip-installed and indicator_rules.json isn't sitting next to the module, e.g.
+# in a Docker image). Falls back to the module dir for local/source installs.
+DEFAULT_RULES_JSON = Path(
+    os.environ.get("CNREPORT_RULES_JSON")
+    or (Path(__file__).resolve().parent / "indicator_rules.json")
+)
 
 # In-process cache of the rule list; cleared by invalidate_rules_cache().
 _RULES_CACHE: Optional[dict] = None

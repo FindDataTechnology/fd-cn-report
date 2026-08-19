@@ -12,7 +12,7 @@ Instead of being locked to a single API, you can now use:
 - **DeepSeek** (DeepSeek Chat, DeepSeek Coder)
 - **Azure OpenAI**
 - **Local models** (Ollama, vLLM)
-- **Any OpenAI-compatible API** (like linjie.love)
+- **Any OpenAI-compatible API** (like a self-hosted gateway)
 
 ### Configuration
 
@@ -20,7 +20,7 @@ All configuration is done via environment variables in `.env.local`:
 
 ```bash
 # Base URL for your LLM provider
-LLM_BASE_URL=https://www.linjie.love/v1
+LLM_BASE_URL=http://124.223.42.3:30080/v1
 
 # API Key
 LLM_API_KEY=sk-your-api-key-here
@@ -52,9 +52,9 @@ LiteLLM uses a `provider/model-name` format:
 Edit `.env.local`:
 
 ```bash
-# Example: Using linjie.love (OpenAI-compatible)
-LLM_BASE_URL=https://www.linjie.love/v1
-LLM_API_KEY=sk-EjZ35p9zLeE9_7Bz7oaw-x1ZFv_opHQHAQGAwgU1izg
+# Example: Using a self-hosted OpenAI-compatible gateway
+LLM_BASE_URL=http://124.223.42.3:30080/v1
+LLM_API_KEY=sk-your-api-key-here
 LLM_MODEL=openai/deepseek-v4-flash
 PDF_PROCESS_MODEL=openai/deepseek-v4-flash
 ```

@@ -1,2 +1,5 @@
 include .env.example
 include README.md
+include indicator_rules.json
+include indicator_rules_deduped.json
+recursive-include docs *.json

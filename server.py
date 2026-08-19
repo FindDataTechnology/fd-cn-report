@@ -14,6 +14,7 @@ Entry: python3 server.py  (FastMCP, stdio transport)
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -1064,5 +1065,81 @@ def open_industry_rules_dashboard(port: int = 8888) -> dict:
     start_dashboard(port)
 
 
+class BearerAuthMiddleware:
+    """ASGI middleware gating http requests behind a bearer token.
+
+    Active only when ``MCP_BEARER_TOKEN`` is set (read per-request): every
+    request must carry ``Authorization: Bearer <token>`` (constant-time
+    compare) or it is rejected with 401 before any MCP handling. stdio
+    never passes through here, and an unset/empty token disables the gate.
+    Shared pattern with fd-open-data-mcp's server.
+    """
+
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    def __call__(self, scope, receive, send):
+        token = os.environ.get("MCP_BEARER_TOKEN", "").strip()
+        if scope["type"] != "http" or not token:
+            return self.asgi_app(scope, receive, send)
+
+        headers = dict(scope.get("headers") or [])
+        provided = headers.get(b"authorization", b"")
+        expected = ("Bearer " + token).encode("utf-8", "surrogateescape")
+        if hmac.compare_digest(provided, expected):
+            return self.asgi_app(scope, receive, send)
+
+        async def _reject(receive, send):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"www-authenticate", b"Bearer"),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": b'{"error": "unauthorized"}'})
+
+        return _reject(receive, send)
+
+
+def main(
+    transport: Optional[str] = None,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+) -> None:
+    """Run the fd-cn-report MCP server.
+
+    ``MCP_TRANSPORT`` / ``MCP_HOST`` / ``MCP_PORT`` env vars provide the
+    fallbacks; with none set this launches stdio exactly as before
+    (``app.run(transport="stdio", show_banner=False)``). With
+    ``transport="http"`` the Streamable HTTP endpoint is
+    ``http://<host>:<port>/mcp`` (host defaults to 127.0.0.1, port to
+    8301). When ``MCP_BEARER_TOKEN`` is set, http requests must carry the
+    matching bearer token (401 otherwise).
+    """
+    transport = transport or os.environ.get("MCP_TRANSPORT") or "stdio"
+    if transport == "stdio":
+        app.run(transport="stdio", show_banner=False)
+        return
+
+    host = host or os.environ.get("MCP_HOST") or "127.0.0.1"
+    if port is None:
+        port = int(os.environ.get("MCP_PORT", "8301"))
+
+    token = os.environ.get("MCP_BEARER_TOKEN", "").strip()
+    if not token:
+        app.run(transport="http", host=host, port=port)
+        return
+
+    import uvicorn
+    from starlette.middleware import Middleware
+
+    asgi = app.http_app(middleware=[Middleware(BearerAuthMiddleware)])
+    uvicorn.run(asgi, host=host, port=port)
+
+
 if __name__ == "__main__":
-    app.run(transport="stdio", show_banner=False)
+    main()

@@ -1,0 +1,25 @@
+# Never bake secrets, local state, or build artifacts into the image.
+# Keep: indicator_rules*.json, cninfo_categories.json, docs/ (package data).
+.git
+.github
+.venv
+.env
+.env.local
+.env.example
+.pytest_cache
+.trae
+.deepeval
+.claude
+.opencode
+openspec/
+__pycache__
+*.pyc
+*.egg-info
+build/
+dist/
+out/
+.cache/
+daas.db
+.DS_Store
+cnreport_tools.py.backup
+dedup_report.json
