@@ -27,7 +27,11 @@ from typing import Optional
 try:
     from dotenv import load_dotenv
 
-    _ROOT = Path(__file__).resolve().parents[2]  # repo root
+    try:
+        _ROOT = Path(__file__).resolve().parents[2]  # repo root
+    except IndexError:
+        # Flat layout (pip install / Docker /app): no repo root above us.
+        _ROOT = Path(__file__).resolve().parent
     load_dotenv(_ROOT / ".env")
     load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 except ImportError:
