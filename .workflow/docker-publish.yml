@@ -1,0 +1,44 @@
+# Gitee Go pipeline — GitHub Actions 的 docker-publish.yml 的等价迁移。
+# 构建 fd-cn-report 镜像并推送到 Harbor（finddata 项目）。
+#
+# Harbor 参数已写死（私有仓库可接受）。若要改用私密参数，在仓库
+# 「流水线 → 参数管理」里配置同名参数后把字段换回 ${HARBOR_HOST} 等：
+#   HARBOR_HOST — 云端流水线: 23.144.68.246:30880；cheap 私有构建机: 172.16.0.186:30880
+#   HARBOR_USER — gitee-ci-push（两个 Harbor 都已建好，finddata 项目 developer）
+#
+# 与 GitHub 版的差异：build@docker 每步一个 tag，用两个步骤（v<构建号> + latest）。
+
+version: '1.0'
+name: docker-publish
+displayName: 构建并推送 fd-cn-report 镜像
+triggers:
+  push:
+    branches:
+      include:
+        - main
+stages:
+- stage:
+  name: build-push
+  displayName: 构建并推送镜像
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: build@docker
+    name: build_image_versioned
+    displayName: 构建镜像 (v<构建号>)
+    repository: 23.144.68.246:30880
+    username: gitee-ci-push
+    password: "GiteeCI#2026push"
+    tag: finddata/fd-cn-report:v${GITEE_PIPELINE_BUILD_NUMBER}
+    dockerfile: ./Dockerfile
+    isCache: true
+  - step: build@docker
+    name: build_image_latest
+    displayName: 构建镜像 (latest)
+    dependsOn: build_image_versioned
+    repository: 23.144.68.246:30880
+    username: gitee-ci-push
+    password: "GiteeCI#2026push"
+    tag: finddata/fd-cn-report:latest
+    dockerfile: ./Dockerfile
+    isCache: true
