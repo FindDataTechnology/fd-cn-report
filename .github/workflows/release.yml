@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: twine check
+        run: twine check dist/*
+      - name: Wheel smoke test
+        run: |
+          python -m pip install pytest
+          # This package ships as flat py-modules, not a package tree: a
+          # top-level module missing from [tool.setuptools] py-modules silently
+          # does NOT ship in the wheel and only ImportErrors at runtime.
+          # Run the repo's own guard for that before anything is published.
+          python -m pytest test_pymodules_guard.py -q
+          # Then confirm the built wheel really does carry every declared module.
+          python - <<'PY'
+          import glob, pathlib, re, zipfile
+
+          pyproject = pathlib.Path("pyproject.toml").read_text()
+          block = re.search(r"py-modules\s*=\s*\[(.*?)\]", pyproject, re.S).group(1)
+          declared = sorted(set(re.findall(r'"([^"]+)"', block)))
+          shipped = {n.rsplit("/", 1)[-1] for n in zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()}
+          missing = [m for m in declared if f"{m}.py" not in shipped]
+          assert not missing, f"declared py-modules absent from the wheel: {missing}"
+          print(f"smoke OK: all {len(declared)} py-modules present in the wheel")
+          PY
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
