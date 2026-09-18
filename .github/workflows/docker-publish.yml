@@ -1,62 +1,26 @@
-name: docker-publish
+# DISABLED (2026-09-18): image builds are DOMESTIC-ONLY.
+#
+# Policy (user directive, 2026-09-10): GitHub-hosted runners must NEVER push to
+# the domestic Harbor or any CN server — foreign runner IPs hammering domestic
+# endpoints risk IP bans. Since the 2026-09-17 Harbor rebuild every documented
+# push credential returns 401, so a run from here fails at `docker login` too.
+#
+# Where this image is built instead: the Gitee Go pipeline committed at
+# `.workflow/docker-publish.yml` (CN→CN), which pushes
+# `<HARBOR_HOST>/finddata/fd-cn-report` as latest / <short-sha> / <tag>; the
+# previous GitHub build/tag/push steps are in git history to mirror them.
+#
+# This stub exists so the file path stays claimed and fails loudly if anyone
+# re-points it at a registry.
+name: docker-publish (disabled)
 
-on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-env:
-  IMAGE_NAME: fd-cn-report
+on: workflow_dispatch
 
 jobs:
-  build-and-push:
+  refuse:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      # Harbor (HARBOR_HOST) serves HTTP, not HTTPS, so both the Docker daemon
-      # and the buildx builder must treat it as an insecure registry.
-      - name: Configure Docker daemon for insecure Harbor registry
+      - name: Refuse
         run: |
-          echo "{\"insecure-registries\": [\"${{ secrets.HARBOR_HOST }}\"]}" | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker
-          sleep 3
-
-      - name: Login to Harbor
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.HARBOR_HOST }}
-          username: ${{ secrets.HARBOR_USER }}
-          password: ${{ secrets.HARBOR_PASS }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-config-inline: |
-            [registry."${{ secrets.HARBOR_HOST }}"]
-              http = true
-
-      - name: Compute image tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # Project `finddata` on the America Harbor; zihan pulls it through
-          # its registries.yaml `harbor.local` mirror.
-          images: ${{ secrets.HARBOR_HOST }}/finddata/${{ env.IMAGE_NAME }}
-          flavor: latest=false
-          tags: |
-            type=raw,value=latest
-            type=sha,format=short
-            type=ref,event=tag
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          echo "::error::Image builds are domestic-only (Gitee Go / box). Do not re-enable pushes from GitHub runners."
+          exit 1
