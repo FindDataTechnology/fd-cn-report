@@ -35,10 +35,9 @@ def strip_html(html: str) -> str:
     """Crude HTML → text: drop tags/scripts, collapse whitespace."""
     html = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", "", html)
     html = re.sub(r"(?s)<[^>]+>", "", html)
-    # entities ponytail: handle the few that matter
-    html = html.replace("&nbsp;", " ").replace("&amp;", "&")
-    html = html.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"')
-    return re.sub(r"[ \t]+", " ", html).strip()
+    from html import unescape  # stdlib: full entity table, single-decode
+    text = unescape(html).replace("\xa0", " ")  # &nbsp; -> plain space, as before
+    return re.sub(r"[ \t]+", " ", text).strip()
 
 
 def extract_pdf_text(data: bytes) -> str:

@@ -34,9 +34,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 _REGISTRY_PATH = Path(__file__).resolve().parent / "indicator_rules.json"
-"""Default migration-seed path. Rules are loaded from the rules database
-(:mod:`rules_db`); this is kept for the ``--rules`` metadata and as the
-seed consumed by ``scripts/migrate_rules_to_db.py``."""
+"""Default rules-file path. Rules are loaded from the rules database
+(:mod:`rules_db`); this file is kept for the ``--rules`` metadata."""
 
 
 def load_rules() -> dict:
@@ -1257,6 +1256,18 @@ def _computed_needs_pdf(rule: dict, depth: int = 0) -> bool:
 # ── concurrency ───────────────────────────────────────────────────
 
 
+def _resolve_env_concurrency(concurrency: Optional[int], env_var: str, default: int) -> int:
+    """Shared resolver: positive ``concurrency`` wins, else ``env_var`` (as int),
+    else ``default``; result clamped to ``>= 1`` (``1`` = sequential)."""
+    if concurrency is not None and concurrency > 0:
+        return concurrency
+    try:
+        env = int(os.environ.get(env_var, str(default)))
+    except (TypeError, ValueError):
+        env = default
+    return max(1, env)
+
+
 def _resolve_concurrency(concurrency: Optional[int]) -> int:
     """Resolve the in-call worker cap for a concurrent extraction pass.
 
@@ -1266,13 +1277,7 @@ def _resolve_concurrency(concurrency: Optional[int]) -> int:
     behavior and call order are identical to a plain loop (the deterministic,
     reproducible path used by tests and rate-fragile providers).
     """
-    if concurrency is not None and concurrency > 0:
-        return concurrency
-    try:
-        env = int(os.environ.get("EXTRACT_CONCURRENCY", "4"))
-    except (TypeError, ValueError):
-        env = 4
-    return max(1, env)
+    return _resolve_env_concurrency(concurrency, "EXTRACT_CONCURRENCY", 4)
 
 
 def _resolve_batch_concurrency(concurrency: Optional[int]) -> int:
@@ -1283,13 +1288,7 @@ def _resolve_batch_concurrency(concurrency: Optional[int]) -> int:
     ``batch_concurrency × extract_concurrency`` stays modest (default ``2 × 4 = 8``
     peak in-flight LLM calls) against provider rate limits.
     """
-    if concurrency is not None and concurrency > 0:
-        return concurrency
-    try:
-        env = int(os.environ.get("EXTRACT_BATCH_CONCURRENCY", "2"))
-    except (TypeError, ValueError):
-        env = 2
-    return max(1, env)
+    return _resolve_env_concurrency(concurrency, "EXTRACT_BATCH_CONCURRENCY", 2)
 
 
 def _map_merge(items, fn, concurrency: int, *, label: str = "") -> list:

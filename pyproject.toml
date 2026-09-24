@@ -28,8 +28,11 @@ dependencies = [
     "pymupdf>=1.28.0",
     "lxml>=4.9",
     "litellm>=1.0",
-    "minio>=7.2.0",
 ]
+
+[project.optional-dependencies]
+# MinIO upload is opt-in at runtime (MINIO_UPLOAD_ENABLED=true; see report_cache._upload_minio)
+minio = ["minio>=7.2.0"]
 
 [project.urls]
 Homepage = "https://github.com/FindDataTechnology/fd-cn-report"
