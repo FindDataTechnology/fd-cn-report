@@ -49,6 +49,7 @@ jobs:
           file: ${{ env.DOCKERFILE }}
           platforms: linux/amd64
           push: true
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
