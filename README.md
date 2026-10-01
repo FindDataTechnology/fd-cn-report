@@ -1,5 +1,7 @@
 # fd-cn-report
 
+> **Wire (柏讯) product line** · the open-data supply line of [FindData](https://www.finddatatech.cloud/products/wire) — Chinese financial reports MCP
+
 **English** | [中文](README.zh-CN.md)
 
 MCP server for Chinese financial reports — 31 申万 L1 industry AI rule system,

@@ -1,5 +1,7 @@
 # fd-cn-report
 
+> **柏讯 Wire 产品线** · [寻数 FindData](https://www.finddatatech.cloud/products/wire) 的开放数据供给线 — 中文财报服务
+
 [English](README.md) | **中文**
 
 面向中国财务报告的 MCP 服务器 —— 覆盖 31 个申万 L1 行业的 AI 规则系统、
