@@ -3,6 +3,13 @@
 This module exposes a DatasourceManifest-compatible CATALOG for Chinese
 financial report extraction (CSRC, SSE, SZSE, BSE listed companies).
 Loadable via: load_catalog("catalog:CATALOG")
+
+Scope: the CATALOG is a **declarative inventory** of the report capabilities
+this repo can provide (command names + output column schemas). It does not
+carry an execution dispatcher — ``FDcnReportProvider.run()`` is explicitly
+unimplemented (see its docstring); the executable surface is the MCP tool set
+in ``server.py``, and platform-side consumption goes through the
+``fd-open-data-mcp`` curated seed (``cn-report-registry`` spec).
 """
 from __future__ import annotations
 
@@ -188,7 +195,16 @@ CATALOG = {
 
 
 class FDcnReportProvider:
-    """DataProvider class for fd-open-data-protocol compatibility."""
+    """DataProvider class for fd-open-data-protocol compatibility.
+
+    The CATALOG ``functions`` list is a **declarative inventory** — it records
+    the report capabilities this repo can provide (and their output column
+    schemas). The executable surface is the MCP tool set in ``server.py``
+    (``list_outline`` / ``extract_section`` / ``extract_indicators`` /
+    ``list_filings`` …); platform-side consumption goes through the
+    ``fd-open-data-mcp`` curated seed (``cn-report-registry`` spec). ``run()``
+    intentionally does not execute these commands — see its docstring.
+    """
 
     name = "fd-cn-report"
 
@@ -197,6 +213,29 @@ class FDcnReportProvider:
         return CATALOG
 
     def run(self, command: str, params: dict):
-        """Execute a command via the MCP server dispatcher."""
-        from cnreport_tools import dispatch as server_dispatch
-        return server_dispatch(command, params)
+        """Explicitly unimplemented — the executable surface is the MCP tool set.
+
+        This provider ships a declarative CATALOG (capabilities + output
+        schemas) but no command dispatcher: the 9 declared commands have no
+        1:1 callables here (the real surface is the 44-tool MCP server, and
+        platform consumption goes through the fd-open-data-mcp curated seed
+        per the cn-report-registry spec). Raising an explicit
+        NotImplementedError — rather than forwarding to a non-existent
+        ``cnreport_tools.dispatch`` — keeps "unimplemented" from masquerading
+        as "broken implementation".
+
+        Args:
+            command: declared command name (from CATALOG["functions"]).
+            params: unused (no execution path exists).
+
+        Raises:
+            NotImplementedError: Always. The message names the real entry
+                points.
+        """
+        raise NotImplementedError(
+            f"fd-cn-report provider 未实现 run({command!r})——本 provider 只提供"
+            "声明性 CATALOG（能力 + 输出列 schema），无可执行命令分派。"
+            "真实入口是 MCP 工具面：python3 server.py 起服后调用 "
+            "list_outline / extract_section / extract_indicators / list_filings 等工具；"
+            "平台侧消费走 fd-open-data-mcp curated seed（cn-report-registry 契约）。"
+        )
