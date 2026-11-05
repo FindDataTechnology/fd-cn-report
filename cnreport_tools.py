@@ -1032,33 +1032,44 @@ def list_filings(
     form: Optional[str] = None,
     category: Optional[str] = None,
     year: Optional[int] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
     limit: int = 20,
 ) -> list[dict] | dict:
-    """List a company's disclosures, filtered by form or category and year.
+    """List a company's disclosures, filtered by form or category and window.
 
     `form` and `category` are mutually exclusive. `form` accepts the four
     periodic report names or a free-text title substring. `category` accepts
     any CNINFO category code or Chinese name from the catalog (e.g. 招股说明书);
     an unknown category returns an error without a network call.
+    `since`/`until` (`YYYY-MM-DD`) select an explicit publication window and
+    take precedence over `year`; passing both is rejected.
     """
     import cninfo_client
 
     if form and category:
         return {"error": "specify either form or category, not both"}
+    if (since or until) and year is not None:
+        return {"error": "specify either year or since/until, not both"}
     if category is not None and not cninfo_client.resolve_category(category):
         return {"error": f"unknown CNINFO category: {category!r}"}
 
     company = cninfo_client.lookup_company(ticker_or_name)
     if not company:
         return {"error": f"no company matched: {ticker_or_name!r}"}
-    rows = cninfo_client.query_announcements(
-        company["stock_code"],
-        company["org_id"],
-        form=form,
-        category=category,
-        year=year,
-        limit=limit,
-    )
+    try:
+        rows = cninfo_client.query_announcements(
+            company["stock_code"],
+            company["org_id"],
+            form=form,
+            category=category,
+            year=year,
+            since=since,
+            until=until,
+            limit=limit,
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
     return rows
 
 

@@ -1469,3 +1469,95 @@ def test_multi_form_integration_two_companies_four_forms(monkeypatch):
                         f"{stock} {form}: no form_filter skips")
     finally:
         pass
+
+
+# ── announcement publication window (since/until) ──
+
+
+def _window_rows():
+    return {
+        "announcements": [
+            {
+                "announcementId": "1",
+                "announcementTitle": "2026年第三季度报告",
+                "announcementTime": 1792454400000,  # 2026-10-20
+                "adjunctUrl": "finalpage/2026-10-20/1.PDF",
+                "secCode": "600519",
+                "secName": "贵州茅台",
+            },
+            {
+                "announcementId": "2",
+                "announcementTitle": "2026年半年度报告",
+                "announcementTime": 1782864000000,  # 2026-07-01
+                "adjunctUrl": "finalpage/2026-07-01/2.PDF",
+                "secCode": "600519",
+                "secName": "贵州茅台",
+            },
+        ]
+    }
+
+
+def test_query_announcements_sends_since_until_window(monkeypatch):
+    import cninfo_client
+
+    seen = {}
+
+    def fake_post(path, data):
+        seen.update(data)
+        return _window_rows()
+
+    monkeypatch.setattr(cninfo_client, "_post_json", fake_post)
+    rows = cninfo_client.query_announcements(
+        "600519", "gssh0600519", since="2026-10-01", until="2026-10-31"
+    )
+    assert seen["seDate"] == "2026-10-01~2026-10-31"
+    assert [r["announcement_id"] for r in rows] == ["1"]
+
+
+def test_query_announcements_only_since_leaves_upper_open(monkeypatch):
+    import cninfo_client
+
+    seen = {}
+
+    def fake_post(path, data):
+        seen.update(data)
+        return _window_rows()
+
+    monkeypatch.setattr(cninfo_client, "_post_json", fake_post)
+    rows = cninfo_client.query_announcements("600519", "gssh0600519", since="2026-10-01")
+    assert seen["seDate"] == "2026-10-01~2099-12-31"
+    assert [r["announcement_id"] for r in rows] == ["1"]
+
+
+def test_query_announcements_year_still_supported(monkeypatch):
+    import cninfo_client
+
+    seen = {}
+
+    def fake_post(path, data):
+        seen.update(data)
+        return _window_rows()
+
+    monkeypatch.setattr(cninfo_client, "_post_json", fake_post)
+    cninfo_client.query_announcements("600519", "gssh0600519", year=2026)
+    assert seen["seDate"] == "2026-01-01~2027-12-31"
+
+
+def test_query_announcements_rejects_year_plus_window(monkeypatch):
+    import cninfo_client
+
+    monkeypatch.setattr(cninfo_client, "_post_json", lambda path, data: {})
+    with pytest.raises(ValueError):
+        cninfo_client.query_announcements(
+            "600519", "gssh0600519", year=2026, since="2026-10-01"
+        )
+
+
+def test_query_announcements_rejects_bad_date(monkeypatch):
+    import cninfo_client
+
+    monkeypatch.setattr(cninfo_client, "_post_json", lambda path, data: {})
+    with pytest.raises(ValueError):
+        cninfo_client.query_announcements(
+            "600519", "gssh0600519", since="2026/10/01"
+        )

@@ -369,6 +369,8 @@ def list_filings(
     form: Optional[str] = None,
     category: Optional[str] = None,
     year: Optional[int] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
     limit: int = 20,
 ) -> dict:
     """List a CN-A-share company's CNINFO disclosures.
@@ -382,12 +384,21 @@ def list_filings(
               to browse the catalog. Mutually exclusive with `form`; supplying both
               returns an error. Unknown categories return an error (no network call).
         year: optional fiscal-year filter (FY year, not publish year).
+        since: optional publication date lower bound (YYYY-MM-DD). Mutually
+               exclusive with `year`.
+        until: optional publication date upper bound (YYYY-MM-DD).
         limit: max rows to return (default 20).
 
     Each entry: {announcement_id, title, form, published, pdf_url, stock_code, company_name}.
     """
     result = T.list_filings(
-        ticker_or_name, form=form, category=category, year=year, limit=limit
+        ticker_or_name,
+        form=form,
+        category=category,
+        year=year,
+        since=since,
+        until=until,
+        limit=limit,
     )
     if isinstance(result, dict):  # error path
         return result

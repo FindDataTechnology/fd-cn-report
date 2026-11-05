@@ -977,13 +977,17 @@ dependencies = [
     { name = "jsonschema" },
     { name = "litellm" },
     { name = "lxml" },
-    { name = "minio" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pymupdf" },
     { name = "pypdf" },
     { name = "python-dotenv" },
     { name = "sqlalchemy" },
+]
+
+[package.optional-dependencies]
+minio = [
+    { name = "minio" },
 ]
 
 [package.metadata]
@@ -995,13 +999,14 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.0" },
     { name = "litellm", specifier = ">=1.0" },
     { name = "lxml", specifier = ">=4.9" },
-    { name = "minio", specifier = ">=7.2.0" },
+    { name = "minio", marker = "extra == 'minio'", specifier = ">=7.2.0" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pymupdf", specifier = ">=1.28.0" },
     { name = "pypdf", specifier = ">=4.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "sqlalchemy", specifier = ">=2.0" },
 ]
+provides-extras = ["minio"]
 
 [[package]]
 name = "filelock"

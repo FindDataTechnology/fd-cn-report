@@ -26,6 +26,7 @@ list_report_types,get_special_report}. Mock-friendly: tests monkeypatch
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -223,9 +224,11 @@ def query_announcements(
     form: Optional[str] = None,
     category: Optional[str] = None,
     year: Optional[int] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
     limit: int = 20,
 ) -> list[dict]:
-    """Query CNINFO disclosures for a company, filtered by form/category and year.
+    """Query CNINFO disclosures for a company, filtered by form/category and window.
 
     `form` accepts either a Chinese title (`年度报告`) or a raw category
     code (`category_ndbg_szsh`); anything else is sent as a free-text
@@ -236,9 +239,21 @@ def query_announcements(
     `category` filter. `form` and `category` are mutually exclusive.
     `year` filters by announcement publication year window — note CN
     annual reports for FY{year} are typically published in {year+1}.
+
+    `since`/`until` (`YYYY-MM-DD`) select an explicit publication window and
+    take precedence over `year`; passing both is rejected rather than silently
+    picking one. Rows outside the window are dropped post-hoc as a belt-and-
+    braces over the server-side `seDate` filter.
     """
     if form and category:
         raise ValueError("specify either form or category, not both")
+    if (since or until) and year is not None:
+        raise ValueError("specify either year or since/until, not both")
+    for name, value in (("since", since), ("until", until)):
+        if value is not None and not _is_iso_date(value):
+            raise ValueError(f"{name} must be YYYY-MM-DD, got {value!r}")
+    if since and until and since > until:
+        raise ValueError(f"since ({since}) must not be after until ({until})")
 
     page_size = max(1, min(int(limit) * 2 + 10, 50))  # over-fetch then post-filter
 
@@ -271,6 +286,9 @@ def query_announcements(
         # CN annual reports for FY{year} publish in {year+1}; widen window
         # so 半年报/季报 also catch their natural publish windows.
         data["seDate"] = f"{year}-01-01~{year + 1}-12-31"
+    elif since or until:
+        # Explicit publication window. Missing bound is left open on that side.
+        data["seDate"] = f"{since or '2000-01-01'}~{until or '2099-12-31'}"
 
     payload = _post_json("/new/hisAnnouncement/query", data)
     rows = payload.get("announcements") or [] if isinstance(payload, dict) else []
@@ -303,10 +321,24 @@ def query_announcements(
             and str(year) not in (mapped.get("title") or "")
         ):
             continue
+        # Post-hoc window filter (belt-and-braces over server-side seDate).
+        published = mapped.get("published") or ""
+        if published:
+            if since and published < since:
+                continue
+            if until and published > until:
+                continue
         results.append(mapped)
         if len(results) >= limit:
             break
     return results
+
+
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _is_iso_date(value: str) -> bool:
+    return bool(_ISO_DATE.match(value or ""))
 
 
 def _form_from_title(title: str) -> str:
