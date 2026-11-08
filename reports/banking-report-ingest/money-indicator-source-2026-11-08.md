@@ -131,3 +131,51 @@ where o.concept_id = c.id and o.source_used = 'akshare'
   概念会重演「granularity 退化」的旧坑，故本期只登记年报，季度留待单独裁定。
 - 逾期/重组类率指标披露面仅 6/42、11/42，是否纳入指标组未裁。
 - 比率类监管指标（资本充足率等）仍只有 5 家（`cn-report` 口径）——扩覆盖属 B 线另一议题。
+
+---
+
+# 追加：银行监管比率的结构化源（2026-11-08，C 线阈值告警需要）
+
+## 为什么又找一个源
+
+阈值告警原先只覆盖 **5/42 家**——比率只来自 `cn-report` 的报告抽取（5 家试点）。
+akshare 封装的财务指标接口都不带银行监管比率（`stock_financial_abstract_ths` /
+`stock_financial_analysis_indicator` 实测无相关列，`..._em` 本身坏）。
+但**东财 F10 原始接口有**，akshare 只是没封装。
+
+## 源与字段
+
+`RPT_F10_FINANCE_MAINFINADATA`（datacenter-web，`filter=(SECURITY_CODE="...")`；注意用
+`SECUCODE` 会返回 0 行），165 个字段，本批银行可用 4 个：
+
+| 指标 | 字段 | 概念码 | FY2025 抽查（601398） | golden |
+|---|---|---|---|---|
+| 资本充足率 | `NEWCAPITALADER` | `financials.capital_adequacy_ratio` | 18.76 | 18.76 ✓ |
+| 一级资本充足率 | `FIRST_ADEQUACY_RATIO` | `financials.tier1_capital_adequacy_ratio` | 14.94 | 14.94 ✓ |
+| 拨备覆盖率 | `BLDKBBL` | `financials.provision_coverage_ratio` | 213.60 | 213.60 ✓ |
+| 贷款拨备率 | `LOAN_PROVISION_RATIO` | `financials.loan_loss_provision_ratio` | 2.79 | 2.79 ✓ |
+
+**核对方式不是自证**：拿 harden 期从报告原文逐值核过的 golden 锚（5 家 × 4 项 = 20 点）
+去比 FY2025 → **20/20 完全一致**；全量取数后 `--verify` 亦 `checked=15 mismatched=0 missing=0`。
+
+## 明确排除的字段（口径对不上就不能用）
+
+- `LIQUIDATION_RATIO`：601398 = **108.03**，而 golden 流动性比例 = **63.20** ⇒ 不是该指标
+  （量级更像流动性匹配率，但接口不给中文名，**不猜、不映射**）
+- `RCAPITAL_RATIO`（核心一级）/ `CAPITAL_LEVERAGE_RATIO`（杠杆率）/
+  `LIQUIDITY_COVERAGE_RATIO`（LCR）：该来源对本批银行**恒为 null**，无值可用
+
+## 落库与覆盖
+
+- `bank_ratio_f10.py` + `scripts/register_bank_ratios_from_f10.py` + `test_bank_ratio_f10.py`（12 单测）
+- 登记 **316 行** `source_used='eastmoney-f10'`，**20 行跳过**（5 家试点 2025 年已有 cn-report 值，
+  保持「同一概念+主体+日期单源」）
+- 覆盖：资本充足率 / 一级 / 拨备覆盖率 / 拨贷比 **5 家 → 42 家**（FY2024 与 FY2025 均 42）
+- 告警侧：阈值判定 **30 条 → 104 条**，覆盖 **42/42**，全部合规（0 越线）；
+  数值区间 11.62–19.69，量级正常
+
+## 仍然只有 5 家的 4 项
+
+核心一级资本充足率、杠杆率、流动性覆盖率、净稳定资金比例——F10 无值，
+仍需报告抽取扩面（B 线议题）。**有数据和能判定是两件事**：拨备覆盖率/贷款拨备率
+数据虽已 42 家，但规则因「区间 + 分档条件」仍停用。
