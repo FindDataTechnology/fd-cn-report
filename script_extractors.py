@@ -56,12 +56,55 @@ _NUM_RE = re.compile(r"-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?")
 _PCT_RE = re.compile(r"-?\d+(?:\.\d+)?\s*%")
 _HEADCOUNT_RE = re.compile(r"(\d[\d,]*)\s*(?:人|名)")
 
+# Accountants write negatives as ``(1,234.56)`` / ``（1,234.56）`` and, in CJK
+# PDFs, with a full-width minus ``－1,234.56``. The regexes above only know the
+# ASCII hyphen, so those forms used to parse as *positive* amounts. Sign
+# normalisation happens once, before tokenising, so every extractor inherits it.
+
+# A dash in sign position only (preceded by non-word text, followed by digits) —
+# so year ranges like ``2023—2025`` are left alone.
+_SIGN_DASH_RE = re.compile(r"(?<![\d\w.,])[－−‐‑‒–—―](?=\s*\d)")
+_PAREN_RE = re.compile(r"[（(]\s*([^()（）\n]{1,40}?)\s*[）)]")
+_PAREN_AMOUNT_RE = re.compile(r"(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d+)\s*%?")
+
+
+def _paren_negative(m: re.Match) -> str:
+    """Rewrite a parenthesised amount as a leading-hyphen negative."""
+    inner = m.group(1).strip()
+    if not _PAREN_AMOUNT_RE.fullmatch(inner):
+        return m.group(0)  # not an amount, e.g. （以下简称"公司"）
+    if inner.isdigit() and not re.match(r"$|[\s，,、;；。]", m.string[m.end():]):
+        return m.group(0)  # a list marker, e.g. （1）营业收入
+    return "-" + inner
+
+
+def _normalize_numbers(text: str) -> str:
+    """Normalise accounting sign conventions before the ASCII regexes run.
+
+    Full-width / typographic dashes become ``-`` when they are in sign
+    position, and a number wrapped in (full-width) parentheses — the standard
+    accounting negative — gains a leading ``-``. Positive values are untouched.
+    """
+    if not text:
+        return text
+    return _PAREN_RE.sub(_paren_negative, _SIGN_DASH_RE.sub("-", text))
+
 
 def _to_float(token: str) -> Optional[float]:
     try:
         return float(token.replace(",", ""))
     except (TypeError, ValueError):
         return None
+
+
+def _find_numbers(text: str) -> list[str]:
+    """All numeric tokens in *text*, after normalising accounting signs."""
+    return _NUM_RE.findall(_normalize_numbers(text))
+
+
+def _find_percent(text: str) -> Optional[re.Match]:
+    """First percentage in *text*, after normalising accounting signs."""
+    return _PCT_RE.search(_normalize_numbers(text))
 
 
 def _is_note_ref(token: str) -> bool:
@@ -128,7 +171,7 @@ def _next_data_lines(lines: list[str], start_idx: int, max_lines: int = 5) -> li
 def _first_valid_number(texts: list[str]) -> Optional[float]:
     """Return the first numeric value from a list of text strings, skipping note refs."""
     for t in texts:
-        nums = _NUM_RE.findall(t)
+        nums = _find_numbers(t)
         if not nums:
             continue
         candidates = _skip_note_refs(nums)
@@ -217,7 +260,7 @@ def regex_amount(section_text: str, rule: dict, period: str) -> dict:
         if name and _line_matches_name(line, name):
             name_found = True
             # Try current line first
-            nums = _NUM_RE.findall(line)
+            nums = _find_numbers(line)
             if nums:
                 candidates = _skip_note_refs(nums)
                 if candidates and (val := _to_float(candidates[0])) is not None:
@@ -244,13 +287,13 @@ def percent_value(section_text: str, rule: dict, period: str) -> dict:
     for idx, line in enumerate(lines):
         if name and _line_matches_name(line, name):
             name_found = True
-            m = _PCT_RE.search(line)
+            m = _find_percent(line)
             if m:
                 val = _to_float(m.group(0).replace("%", "").strip())
                 return {"value": val, "unit": "%", "note": "script:percent_value"}
             # Try next lines
             for nl in _next_data_lines(lines, idx):
-                m = _PCT_RE.search(nl)
+                m = _find_percent(nl)
                 if m:
                     val = _to_float(m.group(0).replace("%", "").strip())
                     return {"value": val, "unit": "%", "note": "script:percent_value"}
@@ -272,7 +315,7 @@ def table_row(section_text: str, rule: dict, period: str) -> dict:
     lines = section_text.splitlines()
     for idx, line in enumerate(lines):
         if name and _line_matches_name(line, name):
-            nums = _NUM_RE.findall(line)
+            nums = _find_numbers(line)
             if nums:
                 candidates = _skip_note_refs(nums)
                 if candidates and (val := _to_float(candidates[0])) is not None:
@@ -306,7 +349,7 @@ def dividend_per_share(section_text: str, rule: dict, period: str) -> dict:
     lines = section_text.splitlines()
     for idx, line in enumerate(lines):
         if any(k in line for k in keywords):
-            nums = _NUM_RE.findall(line)
+            nums = _find_numbers(line)
             if nums:
                 candidates = _skip_note_refs(nums)
                 if candidates and (val := _to_float(candidates[0])) is not None:
@@ -322,7 +365,7 @@ def dividend_per_share(section_text: str, rule: dict, period: str) -> dict:
         idx = section_text.find(kw)
         if idx >= 0:
             context = section_text[idx:idx + 200]
-            nums = _NUM_RE.findall(context)
+            nums = _find_numbers(context)
             if not nums:
                 continue
             candidates = _skip_note_refs(nums)
