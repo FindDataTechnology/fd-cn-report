@@ -1,0 +1,407 @@
+{
+ "version": "1",
+ "mode": "per_date",
+ "wanted_concepts": [
+  {
+   "concept_id": 2890,
+   "code": "financials.capital_adequacy_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "资本充足率",
+     "binding_id": 2965,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2891,
+   "code": "financials.cet1_capital_adequacy_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "核心一级资本充足率",
+     "binding_id": 2966,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2894,
+   "code": "financials.cost_income_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "成本收入比",
+     "binding_id": 2969,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2900,
+   "code": "financials.doubtful_loan_migration_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "可疑类贷款迁徙率",
+     "binding_id": 2975,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2895,
+   "code": "financials.leverage_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "杠杆率",
+     "binding_id": 2970,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2893,
+   "code": "financials.liquidity_coverage_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "流动性覆盖率",
+     "binding_id": 2968,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2889,
+   "code": "financials.loan_loss_provision_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "拨贷比",
+     "binding_id": 2964,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2884,
+   "code": "financials.net_interest_margin",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "净息差",
+     "binding_id": 2959,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2885,
+   "code": "financials.net_interest_spread",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "净利差",
+     "binding_id": 2960,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2896,
+   "code": "financials.net_stable_funding_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "净稳定资金比例",
+     "binding_id": 2971,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2897,
+   "code": "financials.normal_loan_migration_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "正常类贷款迁徙率",
+     "binding_id": 2972,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2887,
+   "code": "financials.npl_balance",
+   "entity_type": "stock",
+   "unit": "currency",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "不良贷款余额",
+     "binding_id": 2962,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2886,
+   "code": "financials.npl_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "不良贷款率",
+     "binding_id": 2961,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2888,
+   "code": "financials.provision_coverage_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "拨备覆盖率",
+     "binding_id": 2963,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2899,
+   "code": "financials.substandard_loan_migration_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "次级类贷款迁徙率",
+     "binding_id": 2974,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2892,
+   "code": "financials.tier1_capital_adequacy_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "一级资本充足率",
+     "binding_id": 2967,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  },
+  {
+   "concept_id": 2898,
+   "code": "financials.watch_loan_migration_ratio",
+   "entity_type": "stock",
+   "unit": "%",
+   "frequency": "yearly",
+   "granularity": "year",
+   "ranked_sources": [
+    {
+     "source": "cn-report",
+     "score": 0.098,
+     "function_id": 752,
+     "function_command": "extract_indicators",
+     "column_name": "关注类贷款迁徙率",
+     "binding_id": 2973,
+     "confidence": 0.95,
+     "bulk_snapshot": false
+    }
+   ]
+  }
+ ],
+ "entity_scope": {
+  "entity_type": "stock",
+  "entity_ids": [
+   3117,
+   3116,
+   3077,
+   3078,
+   3079,
+   3080,
+   3081,
+   3082,
+   3083,
+   3084,
+   3085,
+   3086,
+   3087,
+   3088,
+   3089,
+   3090,
+   3091,
+   3092,
+   3093,
+   3094,
+   3095,
+   3096,
+   3097,
+   3098,
+   3099,
+   3100,
+   59,
+   3101,
+   3102,
+   3103,
+   3104,
+   3105,
+   3106,
+   3107,
+   3108,
+   3109,
+   3110,
+   3111,
+   3112,
+   3113,
+   3114,
+   3115
+  ],
+  "filter": null
+ },
+ "date_range": {
+  "start": "2026-01-01",
+  "end": "2026-11-08",
+  "frequency": null
+ },
+ "unroutable": [],
+ "unmapped": [],
+ "truncated": [],
+ "suppressed": [],
+ "persistence": {
+  "table": "semantic_observations"
+ },
+ "plan_cells": 714
+}

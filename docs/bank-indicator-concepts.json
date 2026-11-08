@@ -1,0 +1,163 @@
+{
+ "version": 1,
+ "created": "2026-11-08",
+ "change": "awaken-banking-report-ingest 6.1",
+ "note": "银行监管指标组的中文科目 → 本体概念映射。真源放 cn-report 侧（指标名由这里的抽取规则定义），registry 侧 scripts/seed_bank_concepts.py 读本文件落 concepts 表。unit 口径与抽取出参一致：百分比用 %，金额用 currency（元）。 frequency=yearly：首批以年报为锚（granularity=year），planner 的 _granularity_for 只认 yearly/monthly，quarterly 会退化成 day 导致 since-last 水线取不到。",
+ "entity_type": "stock",
+ "source": "cn-report",
+ "indicator_concepts": [
+  {
+   "indicator_zh": "净息差",
+   "code": "financials.net_interest_margin",
+   "name_zh": "净息差",
+   "name_en": "Net Interest Margin",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "净利差",
+   "code": "financials.net_interest_spread",
+   "name_zh": "净利差",
+   "name_en": "Net Interest Spread",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "不良贷款率",
+   "code": "financials.npl_ratio",
+   "name_zh": "不良贷款率",
+   "name_en": "Non-performing Loan Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "不良贷款余额",
+   "code": "financials.npl_balance",
+   "name_zh": "不良贷款余额",
+   "name_en": "Non-performing Loan Balance",
+   "category": "Bank Regulatory Indicators",
+   "unit": "currency",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "拨备覆盖率",
+   "code": "financials.provision_coverage_ratio",
+   "name_zh": "拨备覆盖率",
+   "name_en": "Provision Coverage Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "拨贷比",
+   "code": "financials.loan_loss_provision_ratio",
+   "name_zh": "拨贷比",
+   "name_en": "Loan Loss Provision Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "资本充足率",
+   "code": "financials.capital_adequacy_ratio",
+   "name_zh": "资本充足率",
+   "name_en": "Capital Adequacy Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "核心一级资本充足率",
+   "code": "financials.cet1_capital_adequacy_ratio",
+   "name_zh": "核心一级资本充足率",
+   "name_en": "Common Equity Tier 1 Capital Adequacy Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "一级资本充足率",
+   "code": "financials.tier1_capital_adequacy_ratio",
+   "name_zh": "一级资本充足率",
+   "name_en": "Tier 1 Capital Adequacy Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "流动性覆盖率",
+   "code": "financials.liquidity_coverage_ratio",
+   "name_zh": "流动性覆盖率",
+   "name_en": "Liquidity Coverage Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "成本收入比",
+   "code": "financials.cost_income_ratio",
+   "name_zh": "成本收入比",
+   "name_en": "Cost to Income Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "杠杆率",
+   "code": "financials.leverage_ratio",
+   "name_zh": "杠杆率",
+   "name_en": "Leverage Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "净稳定资金比例",
+   "code": "financials.net_stable_funding_ratio",
+   "name_zh": "净稳定资金比例",
+   "name_en": "Net Stable Funding Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "正常类贷款迁徙率",
+   "code": "financials.normal_loan_migration_ratio",
+   "name_zh": "正常类贷款迁徙率",
+   "name_en": "Normal Loan Migration Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "关注类贷款迁徙率",
+   "code": "financials.watch_loan_migration_ratio",
+   "name_zh": "关注类贷款迁徙率",
+   "name_en": "Special Mention Loan Migration Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "次级类贷款迁徙率",
+   "code": "financials.substandard_loan_migration_ratio",
+   "name_zh": "次级类贷款迁徙率",
+   "name_en": "Substandard Loan Migration Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  },
+  {
+   "indicator_zh": "可疑类贷款迁徙率",
+   "code": "financials.doubtful_loan_migration_ratio",
+   "name_zh": "可疑类贷款迁徙率",
+   "name_en": "Doubtful Loan Migration Ratio",
+   "category": "Bank Regulatory Indicators",
+   "unit": "%",
+   "frequency": "yearly"
+  }
+ ]
+}
