@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -32,6 +33,23 @@ sys.path.insert(0, str(_REPO))
 
 GOLDEN = _REPO / "docs" / "golden-bank-indicators.json"
 CACHE_DIR = _REPO / ".cache" / "reports"
+
+
+def _llm_blocked(prompts: dict) -> list[str]:
+    """找出「需要 LLM 但当前没有可用 key」的报告单。
+
+    抽取是**失败软**的：没有 LLM key 时它不抛错，而是把每项都记成 `None`，
+    于是本闸会把**环境缺失**渲染成一整片「✗ 对位失败」——与真的抽取坏掉长得一样
+    （2026-11-08 实测：601398 的 `.indicators.json` 缺失 + 未配 key ⇒ anchors=90 fail=15；
+    补上 key 重跑即 fail=0）。故开跑前先把这两种情况分辨开。
+    """
+    if os.environ.get("LLM_API_KEY"):
+        return []
+    blocked = []
+    for code, year, form in prompts:
+        if not list(CACHE_DIR.glob(f"{code}_{year}_{form}_*.indicators.json")):
+            blocked.append(f"{code} {year} {form}")
+    return blocked
 
 #: 各指标在报告里的原文标签（判断「未披露」用；与选择器链的段名无关）
 LABELS: dict[str, list[str]] = {
@@ -108,6 +126,15 @@ def main() -> int:
     if not prompts:
         print("没有匹配的锚")
         return 1
+
+    blocked = _llm_blocked(prompts)
+    if blocked:
+        print("环境缺失：以下报告既无抽取缓存、也没有配置 LLM_API_KEY。")
+        print("  抽取在无 key 时是失败软的，会把这些项全记成 None 并显示成「✗ 对位失败」——")
+        print("  那不是抽取坏了。请先配置 LLM（或补缓存）再跑本闸：")
+        for b in blocked:
+            print("   -", b)
+        return 2
 
     import indicators_client as IC
 
