@@ -28,6 +28,8 @@ sys.path.insert(0, str(_REPO))
 DAAS_DB = _REPO.parent / "daas.db"
 GOLDEN = _REPO / "docs" / "golden-bank-indicators.json"
 
+import bank_money_gta as BMG  # noqa: E402
+
 BANK13 = ['不良率', '净利息收入', '发放贷款及垫款', '客户存款', '手续费及佣金净收入',
           '拨贷比_coverage', '流动性比例（人民币）', '质押贷款净增加额', '贷款和垫款总额',
           '逾期90天重组贷款率', '逾期贷款率', '重组贷款率', '风险加权资产合计']
@@ -115,10 +117,21 @@ def collect() -> list[dict]:
             verdict = "可用"
         else:
             verdict = "待建锚"
+        # 金额类已被结构化源接管/判不可得 —— 盖掉上面「可修」式的旧判词，
+        # 否则读的人会去修报告选择器（已四次证伪的路）。
+        verdict = BMG.inventory_verdict(row["indicator"], verdict)
         out.append({"id": row["id"], "indicator": row["indicator"],
                     "source": sform, "applies_to": aform, "selected": selected,
                     "verdict": verdict})
     return out
+
+
+def _verdict_kind(verdict: str) -> str:
+    """判定归并成类别，避免长判词把「判定分布」打散成十几条。"""
+    for kind in ("已覆盖", "无源覆盖", "空壳", "可用", "待建锚", "非报告口径", "可修"):
+        if verdict.startswith(kind):
+            return kind
+    return verdict
 
 
 def render(rows: list[dict]) -> str:
@@ -141,7 +154,8 @@ def main() -> int:
     print(table)
     by_verdict: dict[str, int] = {}
     for r in rows:
-        by_verdict[r["verdict"]] = by_verdict.get(r["verdict"], 0) + 1
+        kind = _verdict_kind(r["verdict"])
+        by_verdict[kind] = by_verdict.get(kind, 0) + 1
     print("\n判定分布:", by_verdict)
     miss_sel = [r["indicator"] for r in rows if r["selected"] is None]
     if miss_sel:

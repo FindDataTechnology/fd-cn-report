@@ -214,6 +214,34 @@ def test_golden_covers_every_available_indicator(sources, golden):
         assert it["indicator_zh"] in anchored, f"{it['indicator_zh']} 无锚"
 
 
+# --- 盘点判定 -----------------------------------------------------------------
+
+def test_inventory_overrides_fixable_verdict_for_served(sources):
+    """已由面板覆盖的项，盘点不能再写「可修（休眠）」——那会把人送去修已证伪的路。"""
+    v = bmg.inventory_verdict("客户存款", "可修（休眠：applies_to 双层）", sources)
+    assert v.startswith("已覆盖")
+    assert "a0b2103201" in v and "应计利息" in v
+
+
+def test_inventory_overrides_non_report_verdict_for_unavailable(sources):
+    v = bmg.inventory_verdict("不良率", "非报告口径", sources)
+    assert v.startswith("无源覆盖")
+    assert "不修报告" in v
+
+
+def test_inventory_keeps_base_verdict_for_unlisted(sources):
+    """不在口径表里的指标（比例型）保持原判词。"""
+    assert bmg.inventory_verdict("流动性比例（人民币）", "可用", sources) == "可用"
+
+
+def test_every_money_indicator_is_classified(sources):
+    """12 项金额指标都必须被接管判定，无一漏到旧判词。"""
+    for ind in [i["indicator_zh"] for i in sources["indicators"]]:
+        assert bmg.inventory_verdict(ind, "可修（休眠：apps_to）", sources).startswith("已覆盖")
+    for ind in bmg.unavailable_reasons(sources):
+        assert bmg.inventory_verdict(ind, "可修（休眠：apps_to）", sources).startswith("无源覆盖")
+
+
 # --- 滞后统计 -----------------------------------------------------------------
 
 def test_lag_note_counts_per_year(sources):

@@ -60,6 +60,27 @@ def unavailable_reasons(sources: dict) -> dict[str, str]:
     return {it["indicator_zh"]: it["reason"] for it in sources["unavailable"]}
 
 
+def inventory_verdict(indicator: str, base_verdict: str,
+                      sources: dict | None = None) -> str:
+    """盘点判定：结构化源优先于「报告规则可不可修」的旧判词。
+
+    为什么必须盖掉旧判词：口径表里 4 项已由面板提供，但规则库那几行仍是
+    「selectors + applies_to 双层」，旧逻辑会判成「可修（休眠）」——读的人会去修
+    报告选择器，而那正是已四次证伪的路。无源覆盖的 8 项同理：旧判词「可修」
+    会被当成待办，实际是**不可得**。
+    """
+    src = sources or load_sources()
+    served = {it["indicator_zh"]: it for it in src["indicators"]}
+    blocked = unavailable_reasons(src)
+
+    if indicator in served:
+        it = served[indicator]
+        return f"已覆盖：gta-panel({it['gta_name']})｜口径={it['caliber']}"
+    if indicator in blocked:
+        return f"无源覆盖（不修报告）：{blocked[indicator]}"
+    return base_verdict
+
+
 def accepted_names(sources: dict) -> dict[str, str]:
     """别名 → 规范名。口径表的 ``indicator_zh`` 是规范名（必须与规则库同名），
     面板标签等其它叫法走 ``aliases``；摄入时统一归一到规范名。"""
