@@ -8,7 +8,7 @@ GTA 上市公司面板：值统一以**元**存储，单位歧义从源头消失
 
 1. 读口径表 ``docs/bank-money-indicator-sources.json`` —— 指标 → 面板变量 + 口径钉死 +
    「无结构化源覆盖」清单；
-2. 把面板行（元）转成待登记的观测行，携带 ``source_used='gta-panel'`` 与口径说明；
+2. 把源行（元）转成待登记的观测行，携带来源标记与口径说明；
 3. 用 ``docs/golden-bank-money-gta.json``（证据取自年报原文）逐值核验。
 
 **纪律**：面板滞后一个财年（FY2025 全空）⇒ 无值的年份记「源未入库」，
@@ -98,7 +98,8 @@ def to_millions(value_yuan: float) -> float:
 
 
 def to_observations(values: list[dict], sources: dict,
-                    years: list[int] | None = None) -> tuple[list[dict], dict]:
+                    years: list[int] | None = None,
+                    source_used: str = SOURCE_USED) -> tuple[list[dict], dict]:
     """面板行 → 观测行。
 
     ``values`` 每项 ``{indicator_zh, firm_id, year, value}``，``value`` 单位是元。
@@ -144,7 +145,7 @@ def to_observations(values: list[dict], sources: dict,
             "granularity": "year",
             "value": val,
             "unit": meta["unit"],
-            "source_used": SOURCE_USED,
+            "source_used": source_used,
             "caliber": meta["caliber"],
         })
 

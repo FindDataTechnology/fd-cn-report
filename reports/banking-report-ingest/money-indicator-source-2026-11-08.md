@@ -5,9 +5,10 @@
 
 ## 1. 结论一句话
 
-金额类指标**不在报告正文解析单位**（四次证伪），改由 windows-admin 的 **GTA 面板**
-（`gta_panel`，只读角色 `fdbiz_ro`）取值：值统一为**元**，42 家银行 FY2019–FY2024 已登记
-**966 行**观测。面板**滞后一个财年**（FY2025 全空），故最新财年仍缺。
+金额类指标**不在报告正文解析单位**（四次证伪），由结构化源取值，值统一为**元**。
+主源已升级为 **akshare（东财报表接口）**：42 家 × FY2019–**FY2025** × 4 项 = **1176 行，零缺失**，
+`source_used='akshare'`。**无时滞**（工行接口已到 2026-09-30 季报）。
+GTA 面板降为**离线交叉校验**，不再写库——它既滞后一财年（FY2025 全空），且被查出有错值（见 §3.2）。
 
 ## 2. 12 项盘点
 
@@ -26,7 +27,7 @@
 | 逾期90天重组贷款率 | ❌ 无源 | 无逾期/重组类变量 |
 | 质押贷款净增加额 | ❌ 覆盖不足 | `c0i2008000` FY2024 全样本仅 7 家非空 |
 
-真源：`fd-cn-report/docs/bank-money-indicator-sources.json`（含逐条原文证据）。
+真源：`fd-cn-report/docs/bank-money-indicator-sources.json`（含逐条原文证据、akshare 列映射、`source_priority`）。
 
 ### 2.1 命名规则（会绊人的一处）
 
@@ -41,7 +42,7 @@
 **面板是资产负债表账面口径，含应计利息。** 报告前部的「客户存款总额」「各项贷款」是**本金**
 口径。混用差约 1%，且这正是 `harden-bank-indicator-rules` 期错值的形态之一。
 
-两处独立加总实证（证据取自年报原文，**不是**从面板反抄）：
+### 3.1 两处独立加总实证（证据取自年报原文，**不是**从源反抄）
 
 - 招行 FY2024 存款：本金 `9,096,587` + 应计利息 `98,742` = **`9,195,329`** 百万元 = 面板值
   （FY2023 同法：`8,155,438` + `85,060` = `8,240,498` = 面板值）
@@ -50,6 +51,18 @@
 由此定死两条：
 1. `客户存款` = 含应计利息口径；观测行带 `caliber` 说明。
 2. `发放贷款及垫款` = **净额**，名称与口径都不得写「总额」。
+
+### 3.2 源间交叉校验：10 个不符，全是 GTA 错
+
+akshare 与 GTA 在 FY2019–2024 重叠期共 **724 点**可比，其中 **10 点不符，全部集中在「发放贷款及垫款」**
+（客户存款 / 净利息收入 / 手续费三项 **0 不符**）。逐点定谳：
+
+- 江苏银行 `600919` FY2023：akshare `18,359.72` 亿元 vs GTA `17,474.77` 亿元。
+  年报正文「2024 年末发放贷款和垫款账面价值 20,387 亿元，较上年末增长 11.04%」反推 2023 = **18,360 亿元**
+  → **akshare 对，GTA 错**（差 5.06%）。
+- 其余 9 点偏差中位数 0.0092%，含浮点/千元取整差（如 `199,952,296,000` vs `199,952,295,636.67`）。
+
+**结论**：主源只能是 akshare；GTA 仅作交叉校验，且交叉校验的价值已被证实（它查出了 GTA 的错值）。
 
 ## 4. 年份边界
 
@@ -63,41 +76,58 @@
 | 2024 | 42 | 42 | 42 | 42 |
 | 2025 | **0** | **0** | **0** | **0** |
 
-（42 家银行样本内非空家数。FY2025 整列为空 ⇒ 脚本以 `{"reason":"source_empty"}` 留痕，
-**不插值、不用 FY2024 顶替**。）
+（GTA 面板，42 家样本内非空家数——**这是被替换掉的旧源**，FY2025 整列为空。）
+
+akshare 主源的同期分布：**每年 168 行 = 42 家 × 4 项，FY2019–FY2025 全部满格，零缺失**。
+缺值时仍按 `statement-missing` / `value-missing` 留痕，不插值、不用相邻年份顶替。
 
 ## 5. 已落库数据
 
 - 概念：`financials.customer_deposits` / `financials.net_interest_income` /
   `financials.fee_and_commission_income` / `financials.loans_and_advances_net`（均 `verified=True`，
   `unit=currency`，`frequency=yearly`）→ `financials` 概念总数 55 → **59**
-- 观测：**966 行**，`source_used='gta-panel'`，date 形如 `YYYY-12-31`，`granularity='year'`
-- 幂等：复跑 `inserted=0 skipped=966`
-- 读数面实弹：pod 内回读工行 FY2024 存款 = `34836973000000 currency gta-panel`，实体解析到 `entity_id=59`
+- 观测：**1176 行**，`source_used='akshare'`，date 形如 `YYYY-12-31`，`granularity='year'`，
+  每概念 294 行（42 家 × 7 年）
+- **单源**：已删除本线此前写的 966 行 `gta-panel` 观测，同一 (概念,主体,日期) 不再双源并存
+- 读数面实弹：pod 内 `read` 返回工行 FY2024 `34836973000000` 与 **FY2025 `37311778000000`**，
+  `source_used='akshare'`，实体解析到 `entity_id=59`
 
 ## 6. 复核命令
 
 ```bash
-# 取数 + 核锚（锚的证据取自年报原文，不一致非零退出）
+# 主源：akshare 取数 + 核锚（锚的证据取自年报原文，不一致非零退出）
 cd fd-cn-report
-FDBIZ_DOMAIN_PG_URL="$(grep '^FDBIZ_DOMAIN_PG_URL=' ../fd-find-data-business-mcp/.env | cut -d= -f2-)" \
-  ../fd-open-data-mcp/.venv/bin/python scripts/register_bank_money_from_gta.py \
-  --years 2019-2025 --dump output/bank-money-gta-banks-2026-11-08.json --verify
+NO_PROXY=127.0.0.1,localhost ../scraw-fd-open-data-mcp/.venv/bin/python \
+  scripts/register_bank_money_from_akshare.py \
+  --years 2019-2025 --dump output/akshare-banks-2026-11-08.json --verify
 
-# 离线单测
-../fd-open-data-mcp/.venv/bin/python -m pytest test_bank_money_gta.py -q
+# 交叉校验（对 GTA 的历史 dump，重叠期必须逐值相等）
+../scraw-fd-open-data-mcp/.venv/bin/python scripts/register_bank_money_from_akshare.py \
+  --from-dump output/akshare-banks-2026-11-08.json \
+  --cross-check output/bank-money-gta-banks-2026-11-08.json
+
+# 离线单测（48 条）
+../scraw-fd-open-data-mcp/.venv/bin/python -m pytest \
+  test_bank_money_akshare.py test_bank_money_gta.py -q
 ```
+
+注：`register_bank_money_from_akshare.py` 需同时具备 akshare 与 psycopg2，
+`scraw-fd-open-data-mcp/.venv` 两者都有；`fd-open-data-mcp/.venv` 只有 psycopg2（够跑 GTA 侧）。
 
 ## 7. 回滚
 
 ```sql
-delete from semantic_observations where source_used = 'gta-panel';   -- 删观测
--- 概念如需下线：update concepts set deprecated = true where code like 'financials.%'
---   and code in ('financials.customer_deposits', ...)
+-- 删金额指标观测（只影响这 4 个概念，不碰其他源）
+delete from semantic_observations o using concepts c
+where o.concept_id = c.id and o.source_used = 'akshare'
+  and c.code in ('financials.customer_deposits','financials.net_interest_income',
+                 'financials.fee_and_commission_income','financials.loans_and_advances_net');
+-- 概念如需下线：update concepts set deprecated = true where code in (...)
 ```
 
 ## 8. 未决
 
-- FY2025 及以后的金额指标取数路径：等面板入库（脚本可直接续跑，不改码），或在
-  `fd-cn-report` 恢复抽取后单走报告路径——受「线上保持只读」裁定（11-08）约束，当前悬置。
+- **季频观测**：akshare 有季报数据（工行到 2026-09-30），但把季频写进 `frequency=yearly`
+  概念会重演「granularity 退化」的旧坑，故本期只登记年报，季度留待单独裁定。
 - 逾期/重组类率指标披露面仅 6/42、11/42，是否纳入指标组未裁。
+- 比率类监管指标（资本充足率等）仍只有 5 家（`cn-report` 口径）——扩覆盖属 B 线另一议题。

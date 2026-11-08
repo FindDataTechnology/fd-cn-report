@@ -9,7 +9,7 @@
       "panel",
       "variables"
     ],
-    "role": "fdbiz_ro",
+    "role": "交叉校验源（FY2019–2024 重叠期）",
     "dsn_env": "FDBIZ_DOMAIN_PG_URL",
     "dsn_note": "沿用 business-mcp 的域名 DSN，脚本只把库名换成 gta_panel；也可用 GTA_PANEL_DSN 直接指定",
     "value_unit": "元",
@@ -28,7 +28,11 @@
       "caliber_warning": "不是报告前部「客户存款总额」披露口径（那是本金）。两者相差应计利息，招行 2024 差 98,742 百万元；混用会造成约 1% 的系统性偏差。",
       "caliber_evidence": "招行 2024 年报附注：本金 9,096,587 + 应计利息 98,742 = 9,195,329 百万元，与面板逐值一致；工行 2024 年报正文「客户存款 348,369.73 亿元」= 34,836,973 百万元，与面板一致",
       "concept": "financials.customer_deposits",
-      "unit": "currency"
+      "unit": "currency",
+      "akshare": {
+        "statement": "balance",
+        "column": "ACCEPT_DEPOSIT"
+      }
     },
     {
       "indicator_zh": "净利息收入",
@@ -40,7 +44,11 @@
       "unit": "currency",
       "aliases": [
         "利息净收入"
-      ]
+      ],
+      "akshare": {
+        "statement": "profit",
+        "column": "INTEREST_NI"
+      }
     },
     {
       "indicator_zh": "手续费及佣金净收入",
@@ -49,7 +57,11 @@
       "caliber": "利润表「手续费及佣金净收入」本期数",
       "caliber_evidence": "工行 2024 年报「手续费及佣金净收入 1,093.97 亿元，比上年减少 99.60 亿元」（正文另见 109,397 百万元），面板同年同值",
       "concept": "financials.fee_and_commission_income",
-      "unit": "currency"
+      "unit": "currency",
+      "akshare": {
+        "statement": "profit",
+        "column": "FEE_COMMISSION_NI"
+      }
     },
     {
       "indicator_zh": "发放贷款及垫款",
@@ -59,7 +71,11 @@
       "caliber_warning": "面板只有净额变量，没有「总额」变量。工行 2024：净额 27,613,781 vs 总额 28,372,229 百万元，差额 758,448 恰为贷款减值准备。因此该指标口径固定为「净额」，不得标为「贷款总额」。",
       "caliber_evidence": "工行 2024 面板 27,613,781 百万元；年报贷款总额 28,372,229 百万元，差额与减值准备相符",
       "concept": "financials.loans_and_advances_net",
-      "unit": "currency"
+      "unit": "currency",
+      "akshare": {
+        "statement": "balance",
+        "column": "LOAN_ADVANCE"
+      }
     }
   ],
   "unavailable": [
@@ -97,5 +113,21 @@
     }
   ],
   "enable_rule": "无结构化源覆盖的指标 SHALL 保持休眠并在盘点列明此表给出的原因；SHALL NOT 回退到报告正文的金额单位解析（已证伪）。",
-  "name_rule": "indicators[].indicator_zh 必须与 daas.db 的 llm_rules.indicator 同名（那是引擎、盘点与 spec 的联结键）；口径表之外的其他叫法一律放 aliases。实测踩点：面板标签是「利息净收入」、规则库是「净利息收入」，按名 join 会漏项。"
+  "name_rule": "indicators[].indicator_zh 必须与 daas.db 的 llm_rules.indicator 同名（那是引擎、盘点与 spec 的联结键）；口径表之外的其他叫法一律放 aliases。实测踩点：面板标签是「利息净收入」、规则库是「净利息收入」，按名 join 会漏项。",
+  "source_akshare": {
+    "store": "akshare 东财接口 stock_balance_sheet_by_report_em / stock_profit_sheet_by_report_em",
+    "value_unit": "元",
+    "periods": "全史（1996 起）至最新季报；实测工行已到 2026-09-30",
+    "lag_fiscal_years": 0,
+    "note": "主源。单位与口径与 GTA 面板一致（资产负债表账面值、含应计利息），两源在 FY2019–2024 重叠期应逐值相等，用作独立交叉校验。",
+    "code_form": "东财符号 SH601398 / SZ000001（交易所前缀 + 六位代码）",
+    "role": "主源"
+  },
+  "source_priority": {
+    "primary": "akshare",
+    "cross_check": "gta-panel",
+    "rule": "两点由 akshare 提供（无时滞，覆盖到最新季报）；GTA 面板只在 FY2019–2024 重叠期作独立交叉校验，两源必须逐值相等。不相等说明口径或列映射漂移，先查源不查业务。",
+    "why_not_gta_as_primary": "GTA 滞后一个财年（FY2025 四项在 42 家全空），拿它当主源等于自己制造缺口。"
+  },
+  "caliber_correction": "早期「逐值真值表」混了两种口径：工行 37,311,778 是含应计利息、招行 9,836,130 是本金。故锚一律以年报附注的加总关系为准（存款=本金+应计利息；贷款净额=总额+应计利息−减值准备），不接受裸数字当真值。实测两源给的都是含应计利息：工行 FY2025 37,311,778（与该表一致）、招行 FY2025 9,924,558（= 债 9,836,130 + 应计利息 88,428）。"
 }
