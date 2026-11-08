@@ -43,9 +43,20 @@ FIELDS: dict[str, tuple[str, str, str]] = {
 #: 已知不能用/无值的字段，留档防止后人再试一遍。
 REJECTED = {
     "LIQUIDATION_RATIO": "601398 实测 108.03，与 golden 流动性比例 63.20 不符，不是该指标",
-    "RCAPITAL_RATIO": "本批银行恒为 null",
-    "CAPITAL_LEVERAGE_RATIO": "本批银行恒为 null",
-    "LIQUIDITY_COVERAGE_RATIO": "本批银行恒为 null",
+    "RCAPITAL_RATIO": "全量复核：42 家银行 0/42 有值（不是抽样）",
+    "CAPITAL_LEVERAGE_RATIO": "全量复核：42 家银行 0/42 有值",
+    "LIQUIDITY_COVERAGE_RATIO": "全量复核：42 家银行 0/42 有值",
+}
+#: 全量复核记录（2026-11-08）：不要再用抽样结论判断「有没有值」。
+#: 第一次扫用了 `select distinct stock_code from report_documents`（143 家，混入
+#: 其他业务线的非银行主体），得到「核心一级 84 家非空」——**假阳性**：84 > 42 且
+#: 样例是 000019/000048/000505 这类消费品股。按真银行宇宙（42 家）重扫，
+#: 核心一级 / 杠杆率 / LCR **均为 0/42**；拨贷比 42/42（但该规则因区间判据停用）。
+COVERAGE_AUDIT = {
+    "NEWCAPITALADER": "42/42", "FIRST_ADEQUACY_RATIO": "42/42",
+    "BLDKBBL": "42/42", "LOAN_PROVISION_RATIO": "42/42",
+    "RCAPITAL_RATIO": "0/42", "CAPITAL_LEVERAGE_RATIO": "0/42",
+    "LIQUIDITY_COVERAGE_RATIO": "0/42",
 }
 
 HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://data.eastmoney.com/"}

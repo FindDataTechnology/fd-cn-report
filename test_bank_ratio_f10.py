@@ -16,6 +16,25 @@ def test_only_verified_fields_are_mapped():
                     "LOAN_PROVISION_RATIO"}
 
 
+def test_rejected_fields_are_backed_by_a_full_universe_check():
+    """拒绝理由必须是**全量复核**的结果，不是抽样。
+
+    踩过：第一次拿 `report_documents` 的 143 家（混了消费品股）扫，
+    得到「核心一级 84 家非空」；84 > 42 这个数字本身就是假阳性的证据。
+    真银行宇宙重扫是 0/42。
+    """
+    for col, why in F10.REJECTED.items():
+        if col == "LIQUIDATION_RATIO":
+            continue  # 这条是口径不符，不是"无值"
+        assert "0/42" in why, f"{col} 的拒绝理由必须写明全量结论"
+
+
+def test_coverage_audit_covers_every_field():
+    """每个已知字段都要在覆盖台账里留数，后人不必再扫一遍。"""
+    for col in list(F10.FIELDS) and [v[0] for v in F10.FIELDS.values()]:
+        assert col in F10.COVERAGE_AUDIT, col
+
+
 def test_liquidation_ratio_is_not_mapped():
     """LIQUIDATION_RATIO 实测 108 而流动性比例 golden 是 63.2——绝不能映射。
 
