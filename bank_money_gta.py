@@ -60,6 +60,17 @@ def unavailable_reasons(sources: dict) -> dict[str, str]:
     return {it["indicator_zh"]: it["reason"] for it in sources["unavailable"]}
 
 
+def accepted_names(sources: dict) -> dict[str, str]:
+    """别名 → 规范名。口径表的 ``indicator_zh`` 是规范名（必须与规则库同名），
+    面板标签等其它叫法走 ``aliases``；摄入时统一归一到规范名。"""
+    out: dict[str, str] = {}
+    for it in sources["indicators"]:
+        out[it["indicator_zh"]] = it["indicator_zh"]
+        for a in it.get("aliases") or []:
+            out[a] = it["indicator_zh"]
+    return out
+
+
 def to_millions(value_yuan: float) -> float:
     """元 → 百万元，只用于人工复核与日志；登记按元存（concept.unit=currency）。"""
     return value_yuan / YUAN_PER_MILLION
@@ -80,15 +91,17 @@ def to_observations(values: list[dict], sources: dict,
     「个别银行某年未披露」误当成源不可用。
     """
     by_ind = {it["indicator_zh"]: it for it in sources["indicators"]}
+    alias = accepted_names(sources)
     rows: list[dict] = []
     trace: dict[str, list] = {"empty": [], "empty_years": [], "unmapped": [], "bad": []}
     seen: set[tuple[str, str, int]] = set()
 
     for v in values:
-        ind = v.get("indicator_zh")
-        meta = by_ind.get(ind)
+        raw = v.get("indicator_zh")
+        ind = alias.get(raw)
+        meta = by_ind.get(ind) if ind else None
         if meta is None:
-            trace["unmapped"].append(ind)
+            trace["unmapped"].append(raw)
             continue
         firm = str(v.get("firm_id") or "").strip()
         year = v.get("year")
@@ -127,14 +140,20 @@ def to_observations(values: list[dict], sources: dict,
     return rows, trace
 
 
-def verify_anchors(values: list[dict], golden: dict) -> dict:
+def verify_anchors(values: list[dict], golden: dict,
+                   sources: dict | None = None) -> dict:
     """把面板值与年报原文锚逐值比对。
 
     返回 ``{"checked", "mismatched", "missing"}``；``mismatched`` 与 ``missing``
     非空即视为失败（调用方据此非零退出）。锚的证据来自年报原文，不来自面板，
     因此这是**独立**核验而不是自证。数值按元精确比较。
+
+    取值侧的名字先按口径表的 aliases 归一（面板标签可能是别名），
+    否则「锚用规范名、取值用别名」会一律判 missing。
     """
-    idx = {(v["indicator_zh"], str(v["firm_id"]).zfill(6), v["year"]): v["value"]
+    alias = accepted_names(sources or load_sources())
+    idx = {(alias.get(v["indicator_zh"], v["indicator_zh"]),
+            str(v["firm_id"]).zfill(6), v["year"]): v["value"]
            for v in values if isinstance(v.get("value"), (int, float))}
     mismatched: list[dict] = []
     missing: list[dict] = []

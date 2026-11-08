@@ -52,6 +52,38 @@ def test_unavailable_variants_boilerplate_is_kept_off(sources):
     assert "净额" in reason and "总额" in reason
 
 
+def test_indicator_names_are_canonical_keys(sources):
+    """指标名是联结键：必须与 daas.db 的 llm_rules.indicator 同名。
+
+    实测踩点：面板标签是「利息净收入」、规则库是「净利息收入」，
+    按名 join 会把这一项静默丢掉。故别名只能放 aliases，不能当键。
+    """
+    for it in sources["indicators"]:
+        assert it["indicator_zh"] not in (it.get("aliases") or []), \
+            f"{it['indicator_zh']} 把自己的规范名列进了别名"
+
+
+def test_aliases_are_disjoint_and_resolve_to_canonical(sources):
+    canonical = {it["indicator_zh"] for it in sources["indicators"]}
+    alias = bmg.accepted_names(sources)
+    seen_aliases: set[str] = set()
+    for it in sources["indicators"]:
+        for a in it.get("aliases") or []:
+            assert a not in canonical, f"别名 {a} 撞了规范名"
+            assert a not in seen_aliases, f"别名 {a} 重复"
+            seen_aliases.add(a)
+    assert alias["利息净收入"] == "净利息收入"
+
+
+def test_alias_input_normalizes_to_canonical(sources):
+    """面板标签（别名）摄入后应落到规范名的观测行上。"""
+    rows, trace = bmg.to_observations(
+        [_row("利息净收入", "601398", 2024, 637405000000.0)], sources)
+    assert trace["unmapped"] == []
+    assert rows[0]["indicator_zh"] == "净利息收入"
+    assert rows[0]["concept"] == "financials.net_interest_income"
+
+
 def test_variables_deduped_and_ordered(sources):
     cols = bmg.variables(sources)
     assert len(cols) == len(set(cols))
@@ -188,4 +220,4 @@ def test_lag_note_counts_per_year(sources):
     vals = [_row("客户存款", "601398", 2024, 1.0), _row("客户存款", "600036", 2024, 1.0)]
     note = bmg.lag_note(sources, [2024, 2025], vals)
     assert note["客户存款"] == {2024: 2, 2025: 0}
-    assert note["利息净收入"] == {2024: 0, 2025: 0}
+    assert note["净利息收入"] == {2024: 0, 2025: 0}
