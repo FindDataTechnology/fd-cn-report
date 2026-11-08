@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "created": "2026-11-08",
+  "change": "bank-indicator-money-unit-support",
+  "note": "金额类银行指标的本体概念（源=GTA 面板，单位=元）。**刻意与 docs/bank-indicator-concepts.json 分开**：那份是「报告抽取」的科目映射，而金额项走的不是抽取路径（单位解析已证伪，见 design.md 决策 1）。混在一份里会让抽取脚本重新去报告里找这些金额，等于把已证伪的路再走一遍。播种用 fd-open-data-mcp/scripts/seed_bank_concepts.py --mapping <本文件>。",
+  "source": "gta-panel",
+  "entity_type": "stock",
+  "indicator_concepts": [
+    {
+      "indicator_zh": "客户存款",
+      "code": "financials.customer_deposits",
+      "name_zh": "客户存款",
+      "name_en": "Customer Deposits",
+      "category": "Bank Regulatory Indicators",
+      "unit": "currency",
+      "frequency": "yearly",
+      "caliber": "资产负债表口径，含应计利息（面板 a0b2103201 其中：吸收存款）"
+    },
+    {
+      "indicator_zh": "利息净收入",
+      "code": "financials.net_interest_income",
+      "name_zh": "利息净收入",
+      "name_en": "Net Interest Income",
+      "category": "Bank Regulatory Indicators",
+      "unit": "currency",
+      "frequency": "yearly",
+      "caliber": "利润表本期数（面板 bbd1102000）"
+    },
+    {
+      "indicator_zh": "手续费及佣金净收入",
+      "code": "financials.fee_and_commission_income",
+      "name_zh": "手续费及佣金净收入",
+      "name_en": "Net Fee and Commission Income",
+      "category": "Bank Regulatory Indicators",
+      "unit": "currency",
+      "frequency": "yearly",
+      "caliber": "利润表本期数（面板 b0d1104000）"
+    },
+    {
+      "indicator_zh": "发放贷款及垫款",
+      "code": "financials.loans_and_advances_net",
+      "name_zh": "发放贷款及垫款（净额）",
+      "name_en": "Loans and Advances, Net",
+      "category": "Bank Regulatory Indicators",
+      "unit": "currency",
+      "frequency": "yearly",
+      "caliber": "净额口径，含应计利息并已扣减值准备（面板 a0b1201000）；SHALL NOT 标为「贷款总额」"
+    }
+  ]
+}

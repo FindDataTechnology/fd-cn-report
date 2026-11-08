@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "created": "2026-11-08",
+  "change": "bank-indicator-money-unit-support",
+  "note": "金额类银行指标的结构化取数口径。真源是 windows-admin 上的 GTA 上市公司面板（库 gta_panel，只读角色 fdbiz_ro），不是报告正文。为什么不解析报告单位：四种文本启发式（详见 openspec/changes/bank-indicator-money-unit-support/design.md 决策 1）在 10 个样本上只做到 3–5 个正确、3–4 个判成「元」，属过拟合；面板值统一以元存储，单位歧义从源头消失。",
+
+  "source": {
+    "store": "gta_panel",
+    "tables": ["panel", "variables"],
+    "role": "fdbiz_ro",
+    "dsn_env": "FDBIZ_DOMAIN_PG_URL",
+    "dsn_note": "沿用 business-mcp 的域名 DSN，脚本只把库名换成 gta_panel；也可用 GTA_PANEL_DSN 直接指定",
+    "value_unit": "元",
+    "value_unit_evidence": "面板各行数值与年报「元」级数量一致（工行 2024 客户存款 34,836,973 百万元 = 3.4836973e13 元）",
+    "general_caliber": "资产负债表账面口径：存款与贷款均含应计利息。两处独立实证——招行 2024 存款 9,096,587 本金 + 98,742 应计利息 = 9,195,329；工行 2024 贷款总额 28,372,229 + 应计利息 56,624 − 减值准备 815,072 = 净额 27,613,781。报前部「客户存款总额」「各项贷款」是本金口径，两者不可混用。",
+    "coverage": "FY2019–FY2024；FY2024 对本文 42 家银行四项指标均 42/42 非空",
+    "lag_fiscal_years": 1,
+    "lag_evidence": "FY2025 四项指标非空数分别为 0/1/2/2（42 家样本内为 0），即面板滞后一个财年"
+  },
+
+  "indicators": [
+    {
+      "indicator_zh": "客户存款",
+      "gta_name": "a0b2103201",
+      "gta_label": "其中：吸收存款",
+      "caliber": "资产负债表「客户存款」口径，含应计利息",
+      "caliber_warning": "不是报告前部「客户存款总额」披露口径（那是本金）。两者相差应计利息，招行 2024 差 98,742 百万元；混用会造成约 1% 的系统性偏差。",
+      "caliber_evidence": "招行 2024 年报附注：本金 9,096,587 + 应计利息 98,742 = 9,195,329 百万元，与面板逐值一致；工行 2024 年报正文「客户存款 348,369.73 亿元」= 34,836,973 百万元，与面板一致",
+      "concept": "financials.customer_deposits",
+      "unit": "currency"
+    },
+    {
+      "indicator_zh": "利息净收入",
+      "gta_name": "bbd1102000",
+      "gta_label": "利息净收入",
+      "caliber": "利润表「利息净收入」本期数",
+      "caliber_evidence": "工行 2024 年报正文「利息净收入 6,374.05 亿元」，面板同年同值",
+      "concept": "financials.net_interest_income",
+      "unit": "currency"
+    },
+    {
+      "indicator_zh": "手续费及佣金净收入",
+      "gta_name": "b0d1104000",
+      "gta_label": "手续费及佣金净收入",
+      "caliber": "利润表「手续费及佣金净收入」本期数",
+      "caliber_evidence": "工行 2024 年报「手续费及佣金净收入 1,093.97 亿元，比上年减少 99.60 亿元」（正文另见 109,397 百万元），面板同年同值",
+      "concept": "financials.fee_and_commission_income",
+      "unit": "currency"
+    },
+    {
+      "indicator_zh": "发放贷款及垫款",
+      "gta_name": "a0b1201000",
+      "gta_label": "发放贷款及垫款净额",
+      "caliber": "净额（已扣减值准备）",
+      "caliber_warning": "面板只有净额变量，没有「总额」变量。工行 2024：净额 27,613,781 vs 总额 28,372,229 百万元，差额 758,448 恰为贷款减值准备。因此该指标口径固定为「净额」，不得标为「贷款总额」。",
+      "caliber_evidence": "工行 2024 面板 27,613,781 百万元；年报贷款总额 28,372,229 百万元，差额与减值准备相符",
+      "concept": "financials.loans_and_advances_net",
+      "unit": "currency"
+    }
+  ],
+
+  "unavailable": [
+    {"indicator_zh": "贷款和垫款总额", "reason": "面板只有净额变量 a0b1201000，无「发放贷款和垫款总额」变量；由净额加回减值准备属派生，不采用"},
+    {"indicator_zh": "风险加权资产合计", "reason": "面板无风险加权资产类变量（全表仅 加权平均净资产收益率 含「加权」）"},
+    {"indicator_zh": "拨贷比_coverage", "reason": "无贷款减值准备变量，无法按 准备/贷款 复算；比率类寄存器另有 golden 锚路径"},
+    {"indicator_zh": "不良率", "reason": "面板无不良/五级分类变量"},
+    {"indicator_zh": "逾期贷款率", "reason": "面板无逾期类变量"},
+    {"indicator_zh": "重组贷款率", "reason": "面板无重组类变量"},
+    {"indicator_zh": "逾期90天重组贷款率", "reason": "面板无逾期/重组类变量"},
+    {"indicator_zh": "质押贷款净增加额", "reason": "变量 c0i2008000 存在但 FY2024 全样本仅 7 家非空（42 家银行中覆盖不足），且属现金流量表附注口径，不作为可服务源"}
+  ],
+
+  "enable_rule": "无结构化源覆盖的指标 SHALL 保持休眠并在盘点列明此表给出的原因；SHALL NOT 回退到报告正文的金额单位解析（已证伪）。"
+}
