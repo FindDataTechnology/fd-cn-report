@@ -406,6 +406,7 @@ def _resolve_via_akshare(company: dict, rule: dict, year: int, period: str) -> d
     # companies), so match on the 4-digit year rather than assuming Dec-31.
     target = str(year)
     row = None
+    row_year = None
     date_col = next((c for c in ("报告日", "报告期", "日期") if c in columns), None)
     if date_col:
         di = columns.index(date_col)
@@ -417,18 +418,32 @@ def _resolve_via_akshare(company: dict, rule: dict, year: int, period: str) -> d
             # strings, leaking the most-recent year's value into every year).
             if str(r[di])[:4] == ystr:
                 row = r
+                row_year = ystr
                 break
     if row is None and data:
-        row = data[0]  # fall back to the most recent row
+        # 兜底取 data[0]（假定为最近一期）。**必须把实际年份带出来**：原实现无条件写
+        # provenance=f"akshare row {target}"，而 target 是**请求**年份——于是问 2021、
+        # 报表只有 2024 时，返回 2024 的数字却标成 2021。同比序列会混入不同年份而
+        # 每行都自称年份正确，比返回空值更坏（审计 06 §8）。
+        row = data[0]
+        if date_col:
+            di = columns.index(date_col)
+            row_year = str(row[di])[:4]
     if row is None:
         return _value_obj(
             None, rule=rule, source=f"akshare:{statement}.{field}", extractor="akshare",
             period=period, note="no rows in statement",
         )
     value = row[idx] if idx < len(row) else None
+    if row_year and row_year != target:
+        prov = f"akshare row {row_year} (requested {target})"
+        note = f"no row for {target}; fell back to {row_year}"
+    else:
+        prov = f"akshare row {target}"
+        note = None
     return _value_obj(
         value, rule=rule, source=f"akshare:{statement}.{field}", extractor="akshare",
-        period=period, provenance=f"akshare row {target}",
+        period=period, provenance=prov, note=note,
     )
 
 
