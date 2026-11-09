@@ -35,15 +35,24 @@ jobs:
           username: ${{ secrets.TCR_USERNAME }}
           password: ${{ secrets.TCR_PASSWORD }}
 
+      - id: prev
+        name: 读 main 当前 digest（内容基线）
+        run: |
+          img="$REGISTRY/$NAMESPACE/$IMAGE_NAME"
+          cur=$(docker buildx imagetools inspect "$img:main" \
+                --format '{{.Manifest.Digest}}' 2>/dev/null || true)
+          echo "digest=$cur" >> "$GITHUB_OUTPUT"
+          echo "$IMAGE_NAME main 当前 digest: ${cur:-<不存在，本次为首次构建>}"
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix=sha-
             type=raw,value=main
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ env.DOCKERFILE }}
@@ -53,3 +62,37 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 内容闸门：digest 变了才铸 sha-<commit>，让「同内容多 tag」结构上不可能。
+      - name: 内容变了才铸不可变 tag
+        env:
+          NEW: ${{ steps.build.outputs.digest }}
+          OLD: ${{ steps.prev.outputs.digest }}
+        run: |
+          set -euo pipefail
+          img="$REGISTRY/$NAMESPACE/$IMAGE_NAME"
+          [ -n "$NEW" ] || { echo "::error::构建未产出 digest"; exit 1; }
+          if [ "$NEW" = "$OLD" ]; then
+            echo "内容未变（${NEW}）：不铸新 tag"
+            {
+              echo "### 内容未变，未产出新 tag"
+              echo ""
+              echo "本次构建与 \`main\` 当前指向完全一致。"
+              echo ""
+              echo "- 可直接 pin：\`$img@$NEW\`"
+              echo "- 滚动引用：\`$img:main\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          tag="sha-${GITHUB_SHA::7}"
+          docker buildx imagetools create -t "$img:$tag" "$img@$NEW"
+          echo "已铸 $tag → $NEW"
+          {
+            echo "### 内容有变化，已铸不可变 tag"
+            echo ""
+            echo "| 字段 | 值 |"
+            echo "|---|---|"
+            echo "| tag | \`$tag\` |"
+            echo "| digest | \`$NEW\` |"
+            echo "| 上一内容 digest | \`${OLD:-<无>}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
