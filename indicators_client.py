@@ -345,10 +345,48 @@ def _to_json_val(v: Any) -> Any:
 _META_FIELDS = {"section", "page", "source"}
 
 
+def _page_for_offset(
+    page_offsets: Optional[list[int]], offset: Optional[int],
+) -> Optional[int]:
+    """把字符偏移换算成 1-based 页码；换算不了返回 None（审计 06 §10）。
+
+    ``page_offsets`` 是每页起始的字符偏移（第 1 页通常从 0 开始）。
+    **未知 ≠ 第 1 页**——没有偏移表时返回 None，让消费方看到"不知道"，
+    而不是看到一个假装正确的 1。
+    """
+    if not page_offsets or offset is None:
+        return None
+    try:
+        off = int(offset)
+    except (TypeError, ValueError):
+        return None
+    page = 1
+    for i, start in enumerate(page_offsets):
+        try:
+            if off >= int(start):
+                page = i + 1
+            else:
+                break
+        except (TypeError, ValueError):
+            continue
+    return page
+
+
 def _value_obj(
     value: Any, *, rule: dict, source: str, extractor: str, period: str,
     provenance: str = "", note: str = "",
+    location: Optional[dict] = None,
 ) -> dict:
+    """一个抽取值。``location`` 记"这个数在文档里的哪一页哪一段"（审计 06 §10）。
+
+    **为什么不能只给 ``pdf_url``**：一个字段的全部价值就在"哪张表的哪个单元格"。
+    数字有争议时光有 URL 没法复核——审计要的是 `page` / 命中的段名 / 抽取输入。
+    原料本来就在手边（``_resolve_section`` 收 ``page_offsets``、回 ``matched``），
+    只是此前没往这里传。
+
+    **字段必须在，值为 None 表示未知**——与「字段缺失」区分开：前者是"知道要追但没追到"，
+    后者会让消费方以为这套记录本来就不带位置。
+    """
     return {
         "indicator": rule.get("name"),
         "value": _to_json_val(value),
@@ -358,6 +396,7 @@ def _value_obj(
         "source": source,
         "period": period,
         "provenance": provenance,
+        "location": location,
         "note": note,
     }
 
@@ -961,17 +1000,29 @@ def _resolve_via_report(
             None, rule=rule, source=f"report:{matched}", extractor=rule.get("extractor", "llm"),
             period=period, provenance=pdf_url,
             note=f"section not found; tried {matched}",
+            location=None,
         )
     res = _run_extractor(
         section_text, rule, period, extractor_mode, llm_cache=llm_cache,
         pdf_url=pdf_url, section_key=matched, year=year,
     )
+    # 位置：命中的段名 + 由该段在全文中的偏移换算出的页码（审计 06 §10）。
+    # section_text 是切出来的子串，段首偏移 = text.find(section_text)；
+    # 找不到（重复段/空白差异）时置 None，不猜。
+    sec_start = text.find(section_text) if section_text else -1
+    location = {
+        "section": matched if isinstance(matched, str) else None,
+        "page": _page_for_offset(page_offsets, sec_start if sec_start >= 0 else None),
+        "char_start": sec_start if sec_start >= 0 else None,
+        "char_end": (sec_start + len(section_text)) if sec_start >= 0 else None,
+    }
     return _value_obj(
         res.get("value"), rule=rule, source=f"report:{matched}",
         extractor=res.get("extractor")
         or (res.get("note", "").startswith("llm") and "llm")
         or (rule.get("extractor") or "llm"),
         period=period, provenance=pdf_url, note=res.get("note", ""),
+        location=location,
     )
 
 
