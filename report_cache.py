@@ -241,12 +241,26 @@ def get_or_fetch(
     }
 
 
-def get_cached_indicators(stem: str, expected_rules_hash: str) -> Optional[dict]:
-    """Return the cached indicator bundle for ``stem`` if its ``rules_hash`` matches.
+def get_cached_indicators(
+    stem: str,
+    expected_rules_hash: str,
+    expected_mode: Optional[str] = None,
+) -> Optional[dict]:
+    """Return the cached indicator bundle for ``stem`` if it was produced the same way.
 
-    A bundle miss (no file) or a hash mismatch (rule set changed since the
-    bundle was written) returns ``None`` so the caller re-extracts. The bundle
-    is the ``{stem}.indicators.json`` artifact stored alongside the PDF/text/outline.
+    A bundle miss (no file), a ``rules_hash`` mismatch (rule set changed), or an
+    ``extractor_mode`` mismatch returns ``None`` so the caller re-extracts. The
+    bundle is the ``{stem}.indicators.json`` artifact stored alongside the
+    PDF/text/outline.
+
+    Why the mode matters: a run with ``extractor_mode="python"`` records every
+    LLM-backed indicator as ``value: None`` with a "skipped" note and persists
+    that bundle. ``rules_hash`` covers the rule dicts and Pydantic schemas only,
+    so an ordinary ``auto`` run for the same company/year hashed identically and
+    was served those nulls as ``cached=True`` — a debugging run poisoned that
+    company-year into "a complete extraction that found nothing". Bundles written
+    before this field existed have no ``extractor_mode``; they mismatch and get
+    re-extracted, which is the safe direction.
     """
     if not stem:
         return None
@@ -259,6 +273,8 @@ def get_cached_indicators(stem: str, expected_rules_hash: str) -> Optional[dict]
     except Exception:
         return None
     if bundle.get("rules_hash") != expected_rules_hash:
+        return None
+    if expected_mode is not None and bundle.get("extractor_mode") != expected_mode:
         return None
     return bundle
 

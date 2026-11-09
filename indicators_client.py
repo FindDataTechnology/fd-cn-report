@@ -1379,7 +1379,7 @@ def extract_indicators(
         announcement_id=ctx.filing.get("announcement_id") or "",
     )
     if stem is not None:
-        cached = report_cache.get_cached_indicators(stem, rh)
+        cached = report_cache.get_cached_indicators(stem, rh, extractor_mode)
         if cached is not None:
             cached["cached"] = True
             return cached
