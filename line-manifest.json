@@ -1,0 +1,42 @@
+{
+  "schema": "line-manifest/v1",
+  "line": "cn-report",
+  "public_base_url": "https://mcp.finddatatech.cloud/fd-cn-report",
+  "identity": {
+    "issuer": "https://auth.finddatatech.cloud/oidc",
+    "jwks_uri": "https://auth.finddatatech.cloud/oidc/jwks",
+    "jit_policy": "off",
+    "note": "本仓做**单串共享 bearer 比对**：`MCP_BEARER_TOKEN` 非空才挂 `BearerAuthMiddleware`（server.py:1424-1432；恒时比较 server.py:1360-1391），未配置则不挂门（直接裸跑）。仓内其它 `api_key` 是出站（LLM/ES：cnreport_tools.py:750-950）。无断言兑换端点，jit_policy=off。"
+  },
+  "auth_tracks": [
+    {
+      "kind": "line-native",
+      "name": "mcp-bearer-token",
+      "accepts": "line-native-key",
+      "fallback": true,
+      "note": "`MCP_BEARER_TOKEN` 一把共享钥匙（server.py:1424-1432）：平台摘掉后仍可直连消费本线。缺陷同 open-data——全客户共用、不承载客户身份，客户级区分只能在网关注入后做。"
+    },
+    {
+      "kind": "customer-key",
+      "accepts": "ciyuan-sk",
+      "fallback": false,
+      "enforced": false,
+      "migration_task": "converge-line-identity-and-keys#8.3",
+      "note": "目标态：客户拿词元钥匙直打本线。今天非 `MCP_BEARER_TOKEN` 的 bearer 一律 401。"
+    }
+  ],
+  "scopes": [
+    "line:read",
+    "line:write"
+  ],
+  "billing": {
+    "plane": "ciyuan",
+    "note": "本仓零计费代码（grep `sub2api` 无命中）：按调用扣费发生在网关/registry 的词元平面，不在本线代码里。44 工具中 5 个非只读（index_records 写、delete_index 删等）。"
+  },
+  "surfaces": {
+    "mcp": true,
+    "account": false,
+    "admin": false
+  },
+  "note": "十三组 44 工具：研报目录/分节抽取 + ES 索引存取 + A股/港股/上交所/深交所/北交所/证监会六条官方线 + 银行等垂域。`surfaces.account=false`：无本人用量/账单工具。"
+}
