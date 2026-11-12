@@ -23,6 +23,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY . .
 
+# 线自描述端点（change 1.4）：清单在仓根；COPY . . 已带上，这一行是显式保单——
+# 将来 .dockerignore 加规则时它会先报错，而不是让端点静默变 404。
+COPY line-manifest.json ./
+
 RUN pip install --no-cache-dir .
 
 RUN useradd --create-home --uid 1000 cnreport
