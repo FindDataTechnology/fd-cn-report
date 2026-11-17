@@ -1855,3 +1855,23 @@ def test_parse_does_not_treat_note_number_as_value():
     assert got["现金及存放中央银行款项"] == 268973.0
     assert got["存放同业款项"] == 132090.0
     assert "1" not in got and "2" not in got
+
+
+# ── 计量单位：元 vs 百万元（不同公司不同，不许假设） ────────────────
+
+def test_detect_unit_reads_the_header_not_the_body():
+    """银行写「百万元」、工商写「元」——必须从表头读，且读不出就留空。"""
+    import series_export as S
+    bank = "2024年12月31日\n(除特别注明外，金额单位均为人民币百万元)\n7\n资产\n现金 268,973"
+    assert S.detect_unit(bank) == "百万元"
+    assert S.detect_unit("编制单位：某公司\n单位:元 币种:人民币\n项目") == "元"
+    assert S.detect_unit("编制单位：某公司\n单位：元\n项目") == "元"
+    # 读不出就留空——不许默认「元」
+    assert S.detect_unit("项目\n营业收入\n1,234.56") == ""
+
+
+def test_detect_unit_ignores_body_mentions():
+    """正文里的「万元」是描述性文字，不该被当成本表单位。"""
+    import series_export as S
+    body = "\n".join(["项目", "营业收入", "1,234.56"] + ["说明：本项目金额以万元列示"] * 15)
+    assert S.detect_unit(body) == ""

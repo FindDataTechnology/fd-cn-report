@@ -96,6 +96,35 @@ def period_end(year: int, statement: str = "income_statement") -> str:
     return f"{year}-12-31"
 
 
+#: 报表头里的计量单位声明。**必须读出来**：银行/保险用「人民币百万元」，
+#: 工商企业用「元」。两者混在同一列里而不标单位，等于给出一个看起来正常、
+#: 实际差六个数量级的数字（2026-11-17 真机：000001 资产总计 5,769,270 是
+#: 百万元 = 5.77 万亿，而同表里 000019 的 7,714,550,508.01 是元）。
+_UNIT_PATTERNS = [
+    # `单位：元` / `单位:元 币种:人民币` / `单位：人民币元`
+    (re.compile(r"单位[：:]\s*(?:人民币)?\s*(百万元|万元|千元|元)"), 1),
+    # `(除特别注明外，金额单位均为人民币百万元)`
+    (re.compile(r"金额单位[均为]*\s*(?:人民币)?\s*(百万元|万元|千元|元)"), 1),
+    # 无「单位：」前缀时只认大额单位（`百万元` 不会出现在描述性文字里）；
+    # `元` 太常见，绝不兜底——那会把正文里的「万元列示」误认成表头声明。
+    (re.compile(r"(百万元)"), 1),
+]
+
+
+def detect_unit(text: str) -> str:
+    """从报表头读出计量单位，读不出就如实返回空串（**不假设「元」**）。
+
+    只扫前 12 行——单位声明在表头，正文里出现的「万元」多是描述性文字，
+    扫全文会误判。
+    """
+    head = "\n".join(text.splitlines()[:12])
+    for rx, _g in _UNIT_PATTERNS:
+        m = rx.search(head)
+        if m:
+            return m.group(1)
+    return ""
+
+
 def parse_subject_rows(text: str) -> dict[str, float]:
     """从「一格一行」的报表文本里抽出 {科目: 本期值}。
 
@@ -476,7 +505,9 @@ def subject_series_offline(
         announcement_id=aid,
         announcement_title=sel.get("announcement_title") or "",
         page=page,
-        unit="元",
+        # 单位从这份报表的头里读——不同公司/行业不一样（元 vs 百万元）。
+        # 读不出就留空，下游必须如实显示「单位未标注」，不许当元。
+        unit=detect_unit(body),
     )
 
 
