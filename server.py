@@ -51,23 +51,298 @@ from cnreport_database import get_db, make_report_id  # noqa: E402
 logger = logging.getLogger("fd-cn-report")
 app = FastMCP(name="fd-cn-report")
 
+
 # 线自描述端点 /.well-known/line-manifest.json（change converge-line-identity-and-keys 1.4）：
 # 公开、免鉴权、零网络；原样回吐仓根 line-manifest.json。紧跟 FastMCP 实例创建挂上，
 # 且与下方 EXEMPT_PATHS 成对——只挂路由不加豁免，配了 MCP_BEARER_TOKEN 的线会对匿名
 # 发现请求回 401。
 wellknown.register(app)
 
-#: 共享令牌门必须放行的精确路径。**不含 /mcp**：门本身没有被这条豁免削弱。
-EXEMPT_PATHS = (wellknown.WELL_KNOWN_PATH,)
-
 _DEFAULT_MAX_CHARS = 12000
 _MAX_SIZE = 50
+
+
+# ── tool behaviour annotations (mcp-tool-annotations / tool-surface 上牌) ──
+# 单一事实源：scripts/gen_surface.py 从运行时读取这里的值写入 tool-surface.json，
+# scripts/selfcheck_surface.py 双向断言 manifest ↔ 运行时一致。
+# 口径（MCP hints，如实标注）：39 只读 + 5 写面——写面四类：
+#   index_records（ES bulk 落库）、delete_index（删 ES 索引，destructive）、
+#   clear_cache（清报告缓存，destructive）、audit_rule_gaps（写审计 JSON 产物）、
+#   open_industry_rules_dashboard（起本地 dashboard HTTP 服务）。
+# 取报告/取数类工具的磁盘缓存与 provenance upsert 属透明记忆化，不计写面，
+# 在 manifest 组描述中显式披露；ai_extract/取数类 openWorldHint=true（外网/LLM）。
+TOOL_ANNOTATIONS: dict[str, dict] = {
+    "list_outline": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "extract_section": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "ai_extract": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "index_records": {
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "search_reports": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "delete_index": {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "get_company": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_filings": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_filing": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_financials": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_section": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_report_types": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "get_special_report": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_financial_statements": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_cache": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "clear_cache": {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "list_indicators": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "get_indicator": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "extract_indicators": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "extract_indicators_by_position": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_hk_company": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_hk_filings": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_hk_financials": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_hk_section": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_sse_company": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_sse_filings": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_sse_section": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_sse_interaction": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_szse_company": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_szse_filings": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_szse_section": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_szse_interaction": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_bse_company": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_bse_filings": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_bse_section": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_csrc_filings": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_csrc_ipo_review": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_csrc_merger_review": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_csrc_enforcement": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "list_ministries": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "get_ministry_stat": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "get_nbs_stat": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "audit_rule_gaps": {
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "open_industry_rules_dashboard": {
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": False,
+    },
+}
 
 
 # ── outline extraction tools ────────────────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_outline"])
 def list_outline(source: str, fetcher: str = "uv") -> dict:
     """Fetch a Chinese annual report and return its 目录 outline.
 
@@ -85,7 +360,7 @@ def list_outline(source: str, fetcher: str = "uv") -> dict:
     return {"source": source, "char_count": len(text), "sections": outline}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["extract_section"])
 def extract_section(
     source: str,
     selector: str,
@@ -136,7 +411,7 @@ def extract_section(
 # ── AI processing tool ──────────────────────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["ai_extract"])
 def ai_extract(
     text: str,
     schema: dict,
@@ -197,7 +472,7 @@ def _array_schema(item_schema: dict) -> dict:
 # ── Elasticsearch store tool ────────────────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["index_records"])
 def index_records(
     records: list,
     year: int,
@@ -273,7 +548,7 @@ def index_records(
 # ── Elasticsearch search tool ───────────────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["search_reports"])
 def search_reports(
     query: str,
     year: Optional[int] = None,
@@ -335,7 +610,7 @@ def search_reports(
     }
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["delete_index"])
 def delete_index(year: int, confirm: bool = False) -> dict:
     """Drop the cnreport-{year} Elasticsearch index and its metadata row.
 
@@ -361,7 +636,7 @@ def delete_index(year: int, confirm: bool = False) -> dict:
 # ── company API tools (edgartools-style) ────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_company"])
 def get_company(ticker_or_name: str) -> dict:
     """Resolve a CN-A-share company by 6-digit ticker or Chinese/English name fragment.
 
@@ -373,7 +648,7 @@ def get_company(ticker_or_name: str) -> dict:
     return T.get_company(ticker_or_name)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_filings"])
 def list_filings(
     ticker_or_name: str,
     form: Optional[str] = None,
@@ -415,7 +690,7 @@ def list_filings(
     return {"filings": result, "count": len(result)}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_filing"])
 def get_filing(announcement_id: str, ticker_or_name: Optional[str] = None) -> dict:
     """Fetch one CNINFO announcement's metadata + PDF URL by id.
 
@@ -428,7 +703,7 @@ def get_filing(announcement_id: str, ticker_or_name: Optional[str] = None) -> di
     return T.get_filing(announcement_id, ticker_or_name=ticker_or_name)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_financials"])
 def get_financials(
     ticker_or_name: str,
     statement: Optional[str] = None,
@@ -447,7 +722,7 @@ def get_financials(
     return T.get_financials(ticker_or_name, statement=statement, period=period)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_section"])
 def get_section(
     ticker_or_name: str,
     year: int,
@@ -475,7 +750,7 @@ def get_section(
 # ── report-type catalog + special-report tools ─────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_report_types"])
 def list_report_types(group: Optional[str] = None) -> dict:
     """Browse the CNINFO disclosure category catalog.
 
@@ -489,7 +764,7 @@ def list_report_types(group: Optional[str] = None) -> dict:
     return T.list_report_types(group=group)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_special_report"])
 def get_special_report(
     ticker_or_name: str,
     category: str,
@@ -520,7 +795,7 @@ def get_special_report(
 # ── three major financial statements (三大报表) ─────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_financial_statements"])
 def get_financial_statements(
     ticker_or_name: str,
     year: int,
@@ -554,7 +829,7 @@ def get_financial_statements(
 # ── cache management tools ─────────────────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_cache"])
 def list_cache() -> dict:
     """List cached annual reports.
 
@@ -569,7 +844,7 @@ def list_cache() -> dict:
     return report_cache.list_cache()
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["clear_cache"])
 def clear_cache(
     stock_code: Optional[str] = None, year: Optional[int] = None
 ) -> dict:
@@ -590,7 +865,7 @@ def clear_cache(
 # ── indicator rules engine tools ─────────────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_indicators"])
 def list_indicators(
     module: Optional[str] = None,
     query: Optional[str] = None,
@@ -612,7 +887,7 @@ def list_indicators(
     return T.list_indicators(module=module, query=query, company=company)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_indicator"])
 def get_indicator(
     indicator: str,
     ticker_or_name: str,
@@ -638,7 +913,7 @@ def get_indicator(
     return T.get_indicator(indicator, ticker_or_name, year=year, period=period)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["extract_indicators"])
 def extract_indicators(
     ticker_or_name: str,
     year: int,
@@ -672,7 +947,7 @@ def extract_indicators(
     )
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["extract_indicators_by_position"])
 def extract_indicators_by_position(
     ticker_or_name: str,
     year: int,
@@ -709,7 +984,7 @@ def extract_indicators_by_position(
 # ── HK stock tools ────────────────────────────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_hk_company"])
 def get_hk_company(ticker_or_name: str) -> dict:
     """Resolve a HK stock company by 5-digit ticker or name fragment.
 
@@ -722,7 +997,7 @@ def get_hk_company(ticker_or_name: str) -> dict:
     return T.get_hk_company(ticker_or_name)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_hk_filings"])
 def list_hk_filings(
     ticker_or_name: str,
     form: Optional[str] = None,
@@ -747,7 +1022,7 @@ def list_hk_filings(
     return {"filings": result, "count": len(result) if isinstance(result, list) else 0}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_hk_financials"])
 def get_hk_financials(ticker_or_name: str) -> dict:
     """Return structured financial statements for a HK stock company.
 
@@ -760,7 +1035,7 @@ def get_hk_financials(ticker_or_name: str) -> dict:
     return T.get_hk_financials(ticker_or_name)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_hk_section"])
 def get_hk_section(
     ticker_or_name: str,
     year: int,
@@ -782,7 +1057,7 @@ def get_hk_section(
 # ── SSE (上交所) official-website tools ───────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_sse_company"])
 def get_sse_company(ticker_or_name: str) -> dict:
     """Resolve a SSE-listed company by 6-digit ticker (sse.com.cn).
 
@@ -795,7 +1070,7 @@ def get_sse_company(ticker_or_name: str) -> dict:
     return T.get_sse_company(ticker_or_name)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_sse_filings"])
 def list_sse_filings(
     ticker_or_name: str,
     title: Optional[str] = None,
@@ -818,7 +1093,7 @@ def list_sse_filings(
     return {"filings": result, "count": len(result) if isinstance(result, list) else 0}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_sse_section"])
 def get_sse_section(
     ticker_or_name: str,
     year: int,
@@ -837,7 +1112,7 @@ def get_sse_section(
     return T.get_sse_section(ticker_or_name, year, section)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_sse_interaction"])
 def get_sse_interaction(ticker_or_name: str, limit: int = 20) -> dict:
     """Fetch 上证e互动 investor Q&A for a SSE-listed company (sns.sseinfo.com).
 
@@ -853,7 +1128,7 @@ def get_sse_interaction(ticker_or_name: str, limit: int = 20) -> dict:
 # ── SZSE (深交所) official-website tools ──────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_szse_company"])
 def get_szse_company(ticker_or_name: str) -> dict:
     """Resolve a SZSE-listed company by 6-digit ticker (szse.cn).
 
@@ -865,7 +1140,7 @@ def get_szse_company(ticker_or_name: str) -> dict:
     return T.get_szse_company(ticker_or_name)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_szse_filings"])
 def list_szse_filings(
     ticker_or_name: str,
     title: Optional[str] = None,
@@ -882,7 +1157,7 @@ def list_szse_filings(
     return {"filings": result, "count": len(result) if isinstance(result, list) else 0}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_szse_section"])
 def get_szse_section(
     ticker_or_name: str,
     year: int,
@@ -896,7 +1171,7 @@ def get_szse_section(
     return T.get_szse_section(ticker_or_name, year, section)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_szse_interaction"])
 def get_szse_interaction(ticker_or_name: str, limit: int = 20) -> dict:
     """Fetch 互动易 investor Q&A for a SZSE-listed company (irm.cninfo.com.cn).
 
@@ -908,7 +1183,7 @@ def get_szse_interaction(ticker_or_name: str, limit: int = 20) -> dict:
 # ── BSE (北交所) official-website tools ───────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_bse_company"])
 def get_bse_company(ticker_or_name: str) -> dict:
     """Resolve a BSE-listed company by 6-digit ticker (bse.cn).
 
@@ -920,7 +1195,7 @@ def get_bse_company(ticker_or_name: str) -> dict:
     return T.get_bse_company(ticker_or_name)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_bse_filings"])
 def list_bse_filings(
     ticker_or_name: str,
     title: Optional[str] = None,
@@ -937,7 +1212,7 @@ def list_bse_filings(
     return {"filings": result, "count": len(result) if isinstance(result, list) else 0}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_bse_section"])
 def get_bse_section(
     ticker_or_name: str,
     year: int,
@@ -955,7 +1230,7 @@ def get_bse_section(
 # ── CSRC (证监会) official-website tools ──────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_csrc_filings"])
 def list_csrc_filings(
     category: Optional[str] = None,
     begin_date: Optional[str] = None,
@@ -977,7 +1252,7 @@ def list_csrc_filings(
     return {"filings": result, "count": len(result) if isinstance(result, list) else 0}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_csrc_ipo_review"])
 def get_csrc_ipo_review(company_or_code: str) -> dict:
     """Query CSRC IPO (首发) application review status for a company.
 
@@ -987,7 +1262,7 @@ def get_csrc_ipo_review(company_or_code: str) -> dict:
     return T.get_csrc_ipo_review(company_or_code)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_csrc_merger_review"])
 def get_csrc_merger_review(company_or_code: str) -> dict:
     """Query CSRC 并购重组 (M&A) review status for a company.
 
@@ -996,7 +1271,7 @@ def get_csrc_merger_review(company_or_code: str) -> dict:
     return T.get_csrc_merger_review(company_or_code)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_csrc_enforcement"])
 def list_csrc_enforcement(
     begin_date: Optional[str] = None,
     limit: int = 20,
@@ -1014,7 +1289,7 @@ def list_csrc_enforcement(
 # ── Ministry statistics (部级部门) tools ──────────────────────────
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["list_ministries"])
 def list_ministries() -> dict:
     """List the supported ministry statistics sources.
 
@@ -1026,7 +1301,7 @@ def list_ministries() -> dict:
     return {"ministries": result, "count": len(result) if isinstance(result, list) else 0}
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_ministry_stat"])
 def get_ministry_stat(
     ministry_id: str,
     url: Optional[str] = None,
@@ -1044,7 +1319,7 @@ def get_ministry_stat(
     return T.get_ministry_stat(ministry_id, url=url, limit=limit)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["get_nbs_stat"])
 def get_nbs_stat(indicator_code: str, dbcode: str = "hgnd") -> dict:
     """Query an NBS (国家统计局) macro statistic by indicator code.
 
@@ -1057,7 +1332,7 @@ def get_nbs_stat(indicator_code: str, dbcode: str = "hgnd") -> dict:
     return T.get_nbs_stat(indicator_code, dbcode=dbcode)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["audit_rule_gaps"])
 def audit_rule_gaps(
     out_dir: str = "out",
     output_path: str = "docs/rule_gap_audit.json",
@@ -1075,7 +1350,7 @@ def audit_rule_gaps(
     return T.audit_rule_gaps(out_dir=out_dir, output_path=output_path, max_files=max_files)
 
 
-@app.tool
+@app.tool(annotations=TOOL_ANNOTATIONS["open_industry_rules_dashboard"])
 def open_industry_rules_dashboard(port: int = 8888) -> dict:
     """Start the industry rules web dashboard with filtering and search.
 
@@ -1090,6 +1365,16 @@ def open_industry_rules_dashboard(port: int = 8888) -> dict:
     start_dashboard(port)
 
 
+# 公开路径（免 bearer）——只放「发现面」：探针与线自描述清单，都不是数据面。
+# 线自描述端点（change converge-line-identity-and-keys 1.4）必须与 wellknown.register()
+# 挂的路由**成对**存在：只加路由不加这里，配了令牌的线会对匿名发现请求回 401。
+EXEMPT_PATHS = (
+    "/health",
+    "/healthz",
+    wellknown.WELL_KNOWN_PATH,  # "/.well-known/line-manifest.json"
+)
+
+
 class BearerAuthMiddleware:
     """ASGI middleware gating http requests behind a bearer token.
 
@@ -1097,6 +1382,7 @@ class BearerAuthMiddleware:
     request must carry ``Authorization: Bearer <token>`` (constant-time
     compare) or it is rejected with 401 before any MCP handling. stdio
     never passes through here, and an unset/empty token disables the gate.
+    ``EXEMPT_PATHS`` (health probes, the public line manifest) bypass it.
     Shared pattern with fd-open-data-mcp's server.
     """
 
@@ -1108,7 +1394,6 @@ class BearerAuthMiddleware:
         if scope["type"] != "http" or not token:
             return self.asgi_app(scope, receive, send)
         if (scope.get("path") or "") in EXEMPT_PATHS:
-            # 公开元数据（线自描述）：未持本线凭据的调用方也要能读到「这条线认哪些钥匙」。
             return self.asgi_app(scope, receive, send)
 
         headers = dict(scope.get("headers") or [])

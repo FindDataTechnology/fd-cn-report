@@ -1,0 +1,478 @@
+{
+  "schema": "mcp-tool-surface/v1",
+  "server": "fd-cn-report",
+  "entry_path": "/fd-cn-report",
+  "product_line": "securities",
+  "hosting": [
+    "shared-instance"
+  ],
+  "description": "fd-cn-report 中国金融研报 MCP 能力面，**十三组**共 44 工具：①研报目录/分节抽取与 LLM 结构化抽取；②ES 检索库存取（index_records 写 / delete_index 删）；③A 股（巨潮）、港股、上交所、深交所、北交所、证监会六条官方/半官方数据线；④银行业指标规则引擎；⑤部委统计；⑥规则库治理（审计产物写 / dashboard 起服）。读写面**如实标注**（MCP annotations）：39 只读 + 5 写面（index_records 落库 / delete_index 删索引 / clear_cache 清缓存 / audit_rule_gaps 写审计产物 / open_industry_rules_dashboard 起 HTTP 服务）。取数类工具的磁盘缓存与 provenance upsert 属透明记忆化，不改变面向用户的数据；外网取数与 LLM 调用类工具 openWorldHint=true。共享实例、无逐用户状态。",
+  "skills_eligible_for_packs": [],
+  "tool_annotations": {
+    "list_outline": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "extract_section": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "ai_extract": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "index_records": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "search_reports": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "delete_index": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "get_company": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_filings": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_filing": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_financials": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_section": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_report_types": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "get_special_report": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_financial_statements": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_cache": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "clear_cache": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "list_indicators": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "get_indicator": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "extract_indicators": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "extract_indicators_by_position": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_hk_company": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_hk_filings": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_hk_financials": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_hk_section": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_sse_company": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_sse_filings": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_sse_section": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_sse_interaction": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_szse_company": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_szse_filings": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_szse_section": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_szse_interaction": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_bse_company": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_bse_filings": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_bse_section": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_csrc_filings": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_csrc_ipo_review": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_csrc_merger_review": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_csrc_enforcement": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "list_ministries": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "get_ministry_stat": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "get_nbs_stat": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "audit_rule_gaps": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "open_industry_rules_dashboard": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  "output_structure": {
+    "declared": [
+      "ai_extract",
+      "audit_rule_gaps",
+      "clear_cache",
+      "delete_index",
+      "extract_indicators",
+      "extract_indicators_by_position",
+      "extract_section",
+      "get_bse_company",
+      "get_bse_section",
+      "get_company",
+      "get_csrc_ipo_review",
+      "get_csrc_merger_review",
+      "get_filing",
+      "get_financial_statements",
+      "get_financials",
+      "get_hk_company",
+      "get_hk_financials",
+      "get_hk_section",
+      "get_indicator",
+      "get_ministry_stat",
+      "get_nbs_stat",
+      "get_section",
+      "get_special_report",
+      "get_sse_company",
+      "get_sse_interaction",
+      "get_sse_section",
+      "get_szse_company",
+      "get_szse_interaction",
+      "get_szse_section",
+      "index_records",
+      "list_bse_filings",
+      "list_cache",
+      "list_csrc_enforcement",
+      "list_csrc_filings",
+      "list_filings",
+      "list_hk_filings",
+      "list_indicators",
+      "list_ministries",
+      "list_outline",
+      "list_report_types",
+      "list_sse_filings",
+      "list_szse_filings",
+      "open_industry_rules_dashboard",
+      "search_reports"
+    ],
+    "undeclared": [],
+    "source": "运行时实测（fastmcp structured output；v1 未建独立 outputs.json 生成器）",
+    "note": "declared = fastmcp 按返回标注生成的 output_schema 工具集；required/类型语义以运行时 schema 为准。"
+  },
+  "naming_convention": {
+    "order": "verb_noun",
+    "applies_to": "new_tools",
+    "note": "新工具一律 `动词_名词`。既有工具名即此形态（list_/get_/extract_/search_/index_/delete_/clear_/audit_/open_）；不改名——改名会破坏已发布 pack 的引用。",
+    "historical": "none",
+    "prefix_policy": "跨服务同名工具不得靠前缀区分（前缀是服务标识而非工具语义）；同名消解靠描述里写明部署与数据源差异。"
+  },
+  "tool_groups": [
+    {
+      "group": "outline_extraction",
+      "level": "commercial",
+      "tools": [
+        "extract_section",
+        "list_outline"
+      ],
+      "description": "研报目录与分节抽取：list_outline 拉取年报/招股书等公告 PDF/HTML 并解析目录树，extract_section 按标题/正则/序号抽取单节正文。取回的原文落本地报告缓存、provenance（report_id/section 元数据）upsert 进本地 SQLite——均为透明记忆化，不改变任何面向用户的数据。"
+    },
+    {
+      "group": "ai_extraction",
+      "level": "commercial",
+      "tools": [
+        "ai_extract"
+      ],
+      "description": "LLM 结构化抽取：ai_extract 对分节文本按调用方给的 JSON Schema 抽记录数组（调外部 LLM，openWorld；无本地落库）。缓存与落库均由上层组合工具负责。"
+    },
+    {
+      "group": "es_store",
+      "level": "commercial",
+      "tools": [
+        "delete_index",
+        "index_records",
+        "search_reports"
+      ],
+      "description": "ES 检索库存取（**本组非纯读**）：search_reports 全文+过滤检索（只读）；index_records 把抽取记录 bulk 落 cnreport-{year} 索引（写，幂等键 report_id+section_id）；delete_index 删整年索引及其元数据行（**destructive**，需 confirm=true）。ES 是本服务自己的库，openWorld=false。"
+    },
+    {
+      "group": "company_api",
+      "level": "commercial",
+      "tools": [
+        "get_company",
+        "get_filing",
+        "get_financial_statements",
+        "get_financials",
+        "get_section",
+        "get_special_report",
+        "list_filings",
+        "list_report_types"
+      ],
+      "description": "A 股公司画像与公告（巨潮 CNINFO 线）：公司解析 / 公告列表 / 单公告 / 三大报表结构化 / 便捷分节抽取 / 披露类别目录 / 特殊报告（招股、增发、业绩预告等）。便捷工具的 PDF 下载落报告缓存（透明记忆化）。"
+    },
+    {
+      "group": "cache_mgmt",
+      "level": "commercial",
+      "tools": [
+        "clear_cache",
+        "list_cache"
+      ],
+      "description": "报告缓存管理（**本组非纯读**）：list_cache 列缓存清单（只读）；clear_cache 逐出缓存文件（**destructive**，可全清）。缓存在 pod 本地磁盘，清掉只影响后续取数速度，不丢任何库内数据。"
+    },
+    {
+      "group": "indicator_rules",
+      "level": "commercial",
+      "tools": [
+        "extract_indicators",
+        "extract_indicators_by_position",
+        "get_indicator",
+        "list_indicators"
+      ],
+      "description": "银行业指标规则引擎：规则浏览（indicator_rules.json 驱动）、单指标解析（akshare/报告节/本地计算三路路由）、整包抽取（一次取 PDF + 分节批式 LLM + Python 抽取器 + 本地比率），bundle 落盘缓存供免费重跑（透明记忆化）。"
+    },
+    {
+      "group": "hk_stock",
+      "level": "commercial",
+      "tools": [
+        "get_hk_company",
+        "get_hk_financials",
+        "get_hk_section",
+        "list_hk_filings"
+      ],
+      "description": "港股画像/公告/报表/分节（HK 线）：与 company_api 同构的港股四件套。"
+    },
+    {
+      "group": "sse_official",
+      "level": "commercial",
+      "tools": [
+        "get_sse_company",
+        "get_sse_interaction",
+        "get_sse_section",
+        "list_sse_filings"
+      ],
+      "description": "上交所官方线（sse.com.cn / 上证 e 互动）：公司解析 / 披露列表 / 年报分节 / 投资者互动问答。"
+    },
+    {
+      "group": "szse_official",
+      "level": "commercial",
+      "tools": [
+        "get_szse_company",
+        "get_szse_interaction",
+        "get_szse_section",
+        "list_szse_filings"
+      ],
+      "description": "深交所官方线（szse.cn / 互动易）：公司解析 / 披露列表 / 年报分节 / 投资者互动问答。"
+    },
+    {
+      "group": "bse_official",
+      "level": "commercial",
+      "tools": [
+        "get_bse_company",
+        "get_bse_section",
+        "list_bse_filings"
+      ],
+      "description": "北交所官方线（bse.cn，巨潮兜底）：公司解析 / 披露列表 / 年报分节，行内带 source: bse|cninfo。"
+    },
+    {
+      "group": "csrc_official",
+      "level": "commercial",
+      "tools": [
+        "get_csrc_ipo_review",
+        "get_csrc_merger_review",
+        "list_csrc_enforcement",
+        "list_csrc_filings"
+      ],
+      "description": "证监会官方线（csrc.gov.cn）：监管公告列表 / IPO 首发审核状态 / 并购重组审核状态 / 行政处罚与执法动态。"
+    },
+    {
+      "group": "ministry_stats",
+      "level": "commercial",
+      "tools": [
+        "get_ministry_stat",
+        "get_nbs_stat",
+        "list_ministries"
+      ],
+      "description": "部委统计：来源目录（本地静态） / 部委统计页 HTML 表解析（mof/pboc/safe/gacc/nfra） / 国家统计局指标查询。"
+    },
+    {
+      "group": "rule_audit",
+      "level": "commercial",
+      "tools": [
+        "audit_rule_gaps",
+        "open_industry_rules_dashboard"
+      ],
+      "description": "规则库治理面（**本组非纯读**，运维性质）：audit_rule_gaps 扫描 out/ 抽取包并**写**审计 JSON 产物；open_industry_rules_dashboard 在 pod 本地**起**一个dashboard HTTP 服务（有副作用，不可幂等）。两工具面向本仓维护者，调用方少用。"
+    }
+  ],
+  "registry": {
+    "entry_path": "/fd-cn-report",
+    "expected_tool_count": 44,
+    "consumption_note": "共享实例：查询/抽取面无逐用户状态（报告缓存与 bundle 缓存为透明记忆化，跨调用者共享不泄露——缓存键即公告 URL/公司+年份）；ES 库为本服务自有数据面。写面五工具（index_records/delete_index/clear_cache/audit_rule_gaps/open_industry_rules_dashboard）面向数据管道维护场景，消费侧 pack 不应引用。",
+    "mcp_endpoint": "http://cheap6.mesh.finddata.cn:31852/mcp"
+  }
+}
