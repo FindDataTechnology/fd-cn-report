@@ -45,10 +45,20 @@ if str(_MODELS) not in sys.path:
 from fastmcp import FastMCP  # noqa: E402
 
 import cnreport_tools as T  # noqa: E402
+import wellknown  # noqa: E402  （平铺模块：仓根 wellknown.py）
 from cnreport_database import get_db, make_report_id  # noqa: E402
 
 logger = logging.getLogger("fd-cn-report")
 app = FastMCP(name="fd-cn-report")
+
+# 线自描述端点 /.well-known/line-manifest.json（change converge-line-identity-and-keys 1.4）：
+# 公开、免鉴权、零网络；原样回吐仓根 line-manifest.json。紧跟 FastMCP 实例创建挂上，
+# 且与下方 EXEMPT_PATHS 成对——只挂路由不加豁免，配了 MCP_BEARER_TOKEN 的线会对匿名
+# 发现请求回 401。
+wellknown.register(app)
+
+#: 共享令牌门必须放行的精确路径。**不含 /mcp**：门本身没有被这条豁免削弱。
+EXEMPT_PATHS = (wellknown.WELL_KNOWN_PATH,)
 
 _DEFAULT_MAX_CHARS = 12000
 _MAX_SIZE = 50
@@ -1096,6 +1106,9 @@ class BearerAuthMiddleware:
     def __call__(self, scope, receive, send):
         token = os.environ.get("MCP_BEARER_TOKEN", "").strip()
         if scope["type"] != "http" or not token:
+            return self.asgi_app(scope, receive, send)
+        if (scope.get("path") or "") in EXEMPT_PATHS:
+            # 公开元数据（线自描述）：未持本线凭据的调用方也要能读到「这条线认哪些钥匙」。
             return self.asgi_app(scope, receive, send)
 
         headers = dict(scope.get("headers") or [])
