@@ -48,4 +48,6 @@ docs/indicators_coverage_report.csv
 .claude/
 .opencode/
 .trae/
-openspec/
+# openspec/ 纳管：本仓的 spec 是真源（report-filing-provenance 等），
+# 与 law-bench / fd-wire / fd-open-data-mcp / paas 四个仓一致。
+# 此前被忽略是唯一一处偏离，导致「故事改了但评审看不到 diff」。
