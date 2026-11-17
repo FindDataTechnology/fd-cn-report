@@ -1658,3 +1658,50 @@ def test_get_financials_declares_untraceable(monkeypatch):
     r = T2.get_financials("600519")
     assert r["announcement_traceable"] is False
     assert r["source"] == "sina_akshare_aggregate"
+
+
+# ── series_export：财报序列导出（openspec cn-report-dashboard-data-plane） ──────
+# 三条口径：as_of 取期末不取抽取日 / 版本取更正后 / 科目匹配三档从严到宽。
+
+
+def test_period_end_is_fiscal_year_end():
+    import series_export as S
+    assert S.period_end(2024) == "2024-12-31"
+
+
+def test_parse_subject_rows_keeps_first_period_value():
+    import series_export as S
+    text = ("一、营业总收入\n150,560,330,316.45 127,553,959,355.97\n"
+            "其中：营业收入\n40\n147,693,604,994.14 124,099,843,771.99\n")
+    got = S.parse_subject_rows(text)
+    assert got["一、营业总收入"] == 150560330316.45     # 本期，不是上期
+    assert got["其中：营业收入"] == 147693604994.14
+
+
+def test_parse_subject_rows_merges_wrapped_label():
+    """巨潮 PDF 按列宽切标签：`...收到的现` + `金`。不合并会得到「金」这种假科目。"""
+    import series_export as S
+    text = ("销售商品、提供劳务收到的现\n金\n1,086,981,535.11\n"
+            "1.归属于母公司股东的净利润\n（净亏损以\"-\"号填列）\n51,698,765.52\n")
+    got = S.parse_subject_rows(text)
+    assert got["销售商品、提供劳务收到的现金"] == 1086981535.11
+    assert got['1.归属于母公司股东的净利润（净亏损以"-"号填列）'] == 51698765.52
+
+
+def test_match_subject_prefers_exact_over_containing():
+    """`流动负债合计` 含 `负债合计` 但不是它 —— 精确优先。"""
+    import series_export as S
+    vals = {"流动负债合计": 487e8, "负债合计": 490e8}
+    assert S._match_subject("负债合计", vals) == "负债合计"
+
+
+def test_match_subject_falls_back_to_first_containing():
+    """文档里没有精确的「营业收入」——取文档序首个包含项（合并报表在前）。"""
+    import series_export as S
+    vals = {"其中：营业收入": 1477e8, "一、营业收入": 814e8}
+    assert S._match_subject("营业收入", vals) == "其中：营业收入"
+
+
+def test_match_subject_returns_none_when_absent():
+    import series_export as S
+    assert S._match_subject("不存在的科目", {"资产总计": 1.0}) is None
