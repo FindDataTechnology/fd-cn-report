@@ -1816,3 +1816,19 @@ def test_statement_values_are_merged_scope_and_unchanged(real_report_cache):
         if abs(p.value - want) > 0.005 or p.page != page:
             bad.append((code, year, stmt, subj, p.value, p.page, want, page))
     assert not bad, bad
+
+
+def test_pick_report_filing_drops_summary_before_body():
+    """摘要不是报告正文——000001/2024 实测摘要排在正文前面，只滤「更正」会选错。"""
+    import cnreport_tools as T2
+    rows = [
+        {"title": "平安银行2024年年度报告摘要", "announcement_id": "sum"},
+        {"title": "平安银行2024年年度报告", "announcement_id": "body"},
+    ]
+    assert T2._pick_report_filing(rows)["announcement_id"] == "body"
+
+
+def test_pick_report_filing_falls_back_when_only_summaries():
+    import cnreport_tools as T2
+    rows = [{"title": "某公司年报摘要", "announcement_id": "only"}]
+    assert T2._pick_report_filing(rows)["announcement_id"] == "only"

@@ -1036,24 +1036,32 @@ def get_company(ticker_or_name: str) -> dict:
 
 _CORRECTION_NOTICE = "更正"
 _CORRECTED_SUFFIX = "更正后"
+#: 摘要不是报告正文（2026-11-17 实测：000001/2024 的候选里摘要排在正文前面，
+#: 只滤「更正」会把摘要当正文，抽出来的三大表要么缺要么串行）。
+_SUMMARY_MARKER = "摘要"
 
 
 def _pick_report_filing(filings: list[dict]) -> dict:
-    """Pick the report body: drop 更正 notices, prefer the 更正后 version.
+    """Pick the report body: drop 更正 notices and 摘要, prefer the 更正后 version.
 
     Returns ``filings[0]`` unchanged when nothing survives, so a caller never
     gets an empty pick — a bad pick is visible in the result, an empty pick
     would turn into an unrelated error.
     """
+    def title_of(f: dict) -> str:
+        return f.get("title") or ""
+
     clean = [
         f for f in filings
-        if not (_CORRECTION_NOTICE in (f.get("title") or "")
-                and _CORRECTED_SUFFIX not in (f.get("title") or ""))
+        if not (_CORRECTION_NOTICE in title_of(f)
+                and _CORRECTED_SUFFIX not in title_of(f))
+        # 摘要排在正文前是常态（000001/2024 实测），它不是报告本体
+        and _SUMMARY_MARKER not in title_of(f)
     ]
     # sorted() is stable, so among equally-ranked filings the query order holds.
     ordered = sorted(
         clean,
-        key=lambda f: (0 if _CORRECTED_SUFFIX in (f.get("title") or "") else 1),
+        key=lambda f: (0 if _CORRECTED_SUFFIX in title_of(f) else 1),
     )
     return (ordered or filings)[0]
 
