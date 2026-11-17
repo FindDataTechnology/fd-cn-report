@@ -1832,3 +1832,26 @@ def test_pick_report_filing_falls_back_when_only_summaries():
     import cnreport_tools as T2
     rows = [{"title": "某公司年报摘要", "announcement_id": "only"}]
     assert T2._pick_report_filing(rows)["announcement_id"] == "only"
+
+
+# ── 数值形态：银行/保险报表是「百万元、无小数」 ──────────────────────
+
+def test_to_float_handles_bank_and_paren_negatives():
+    """000001 这类银行报表用百万元整数；负值写括号（含全角）。"""
+    import series_export as S
+    assert S._to_float("268,973") == 268973.0
+    assert S._to_float("(104,954)") == -104954.0
+    assert S._to_float("（1,000）") == -1000.0
+    assert S._to_float("1,234,567.89") == 1234567.89
+    assert S._to_float("－500") == -500.0
+    assert S._to_float("abc") is None
+
+
+def test_parse_does_not_treat_note_number_as_value():
+    """银行报表是「科目 / 附注号 / 数值」三行一组；附注号 1 不许当本期值。"""
+    import series_export as S
+    text = "现金及存放中央银行款项\n1\n268,973\n274,663\n存放同业款项\n2\n132,090\n93,317\n"
+    got = S.parse_subject_rows(text)
+    assert got["现金及存放中央银行款项"] == 268973.0
+    assert got["存放同业款项"] == 132090.0
+    assert "1" not in got and "2" not in got

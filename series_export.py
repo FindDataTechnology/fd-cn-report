@@ -27,8 +27,37 @@ STATEMENTS = {
     "cashflow": "现金流量表",
 }
 
-#: 数值行判据。巨潮 PDF 抽出来是「一格一行」，数值形如 `1,234,567.89` 或 `-123.45`。
-_NUM = re.compile(r"^-?[\d,]+\.\d{2}$")
+#: 数值行判据。巨潮 PDF 抽出来是「一格一行」，数值有三种常见形态（都是真机样本）：
+#:   工商企业：`1,234,567.89` / `-123.45`        —— 元，两位小数
+#:   银行/保险：`268,973` / `(104,954)`          —— 百万元，无小数；负号常写成括号
+#:   混合：`1,234`
+#: 早先只认第一种，于是银行报表（000001 等）一个科目都抽不出来——那不是"报表里没有"，
+#: 是判据太窄。
+_NUM = re.compile(r"^\(?-?[\d,]+(?:\.\d+)?\)?$")
+
+
+def _to_float(token: str) -> Optional[float]:
+    """数值文本 → float。括号与全角负号都按负处理（财报通用写法）。
+
+    全角括号 ``（1,000）`` 也是负数——2026-11-17 实测：早先只处理半角，
+    银行报表里的负值全被读成正值。
+    """
+    s = token.strip()
+    neg = False
+    for lo, hi in (("(", ")"), ("（", "）")):
+        if s.startswith(lo) and s.endswith(hi):
+            neg, s = True, s[1:-1]
+            break
+    s = s.replace(",", "").replace(" ", "")
+    if s[:1] in ("－", "−", "-"):
+        neg, s = True, s[1:]
+    if not s or not any(ch.isdigit() for ch in s):
+        return None
+    try:
+        v = float(s)
+    except ValueError:
+        return None
+    return -v if neg else v
 
 #: 带序号的科目名（`一、…` / `1.…` / `（一）…`）：这类是**真科目**，不许当续行碎片合并。
 _ENUMERATED = re.compile(r"^(?:[一二三四五六七八九十]+[、.．]|\d+[、.．]|[（(][一二三四五六七八九十\d]+[）)])")
@@ -85,13 +114,19 @@ def parse_subject_rows(text: str) -> dict[str, float]:
         line = raw.strip()
         if not line:
             continue
+        # 附注号（`37` / `1` / `七、40` / `56(1)`）先于数值行判断。
+        # **顺序很重要**：银行报表是「科目 / 附注号 / 数值」三行一组，
+        # `1` 既是合法数值也是附注号。先判数值会把附注号当成本期值，
+        # 于是 `现金及存放中央银行款项` = 1（真机实测）。
+        # 只在「上一行还没有数值」时认成附注号——否则 `1` 是真正的值（百万位整数）。
+        if (rows and not rows[-1][1]
+                and re.fullmatch(r"[（(]?\d{1,3}[)）]?|[一二三四五六七八九十]+、\d{1,3}", line)):
+            continue
         tokens = line.split()
         if tokens and all(_NUM.match(t) for t in tokens):
             if rows:
                 rows[-1][1].extend(tokens)
             continue
-        if line.isdigit() and len(line) <= 3:
-            continue          # 附注号，不构成新行
         # 续行：上一行还是空值行，且本行像是被切断的后半截。
         # 三种形态都见过（真机样本）：
         #   `销售商品、提供劳务收到的现` + `金`                  —— 短碎片（≤2 字）
@@ -104,6 +139,15 @@ def parse_subject_rows(text: str) -> dict[str, float]:
         # openspec change `cnreport-statement-slice-bound`。
         # 只在「上一行无值」时合并，所以不会把两个各有数值的相邻科目粘在一起；
         # 冒号/序号开头（`一、`、`（一）`、`1.`）的仍是真科目，不合并。
+        # 续行合并：判「这一行是不是被切碎的后半截」。
+        #
+        # 两边的真机教训**互相冲突**，所以不能单靠长度阈值：
+        #   · 600965/2024：`经营活动产生的现金流` + `量净额`（3 字）不合并 ⇒
+        #     合并表那行没进正确键，面板显示母公司数 −60,698,503.96（真值是
+        #     103,672,405.28）。见 change `cnreport-statement-slice-bound` 2.0。
+        #   · 000001/2024：`一、营业收入` + `利息收入`（4 字）若合并 ⇒
+        #     「利息收入」这个真科目整条丢失，而银行报表里 4 字科目极多。
+        #
         if rows and not rows[-1][1] and (
             len(line) <= 2
             or line[0] in "（("
@@ -117,10 +161,9 @@ def parse_subject_rows(text: str) -> dict[str, float]:
     for label, values in rows:
         if not values:
             continue
-        try:
-            out.setdefault(label, float(values[0].replace(",", "")))
-        except ValueError:
-            continue
+        v = _to_float(values[0])
+        if v is not None:
+            out.setdefault(label, v)
     return out
 
 
