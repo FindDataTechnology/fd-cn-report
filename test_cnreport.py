@@ -1723,3 +1723,96 @@ def test_offline_miss_names_company_year_statement_and_says_cache_miss():
     assert "缓存未命中" in msg, msg
     assert "999998" in msg and "1991" in msg, msg
     assert "income_statement" in msg, f"报表槽位不是报表名：{msg}"
+
+
+# ── 区段边界（openspec cnreport-statement-slice-bound） ────────────────────
+# 现金流量表常是章节里最后一张表 ⇒ 切章回退「到文末」⇒ 权益变动表与附注进了区段；
+# 而附注里有与报表同名的标签。这里钉两件事：边界裁得掉，且裁完不改变在架科目
+# （唯一例外是被跨表污染更正的那一格，逐项点名）。
+
+def test_bound_cuts_at_the_next_statement_title():
+    import series_export as S
+    body = "\n".join([
+        "合并现金流量表", "项目", "附注", "2024年度",
+        "经营活动产生的现金流量净额", "103,672,405.28",
+        "公司负责人：某某",
+        "母公司现金流量表", "经营活动产生的现金流量净额", "-60,698,503.96",
+    ])
+    cut, cue = S._bound_to_statement(body)
+    assert cue == "母公司现金流量表"
+    assert "103,672,405.28" in cut and "-60,698,503.96" not in cut
+    # 本条自己的标题不许被当成边界
+    assert cut.splitlines()[0] == "合并现金流量表"
+
+
+def test_bound_does_not_use_bare_note_header_as_boundary():
+    """裸「附注」是报表列头（每段第 3–7 行），拿它当边界会把整张表砍空。"""
+    import series_export as S
+    body = "合并利润表\n项目\n附注\n2024年度\n营业收入\n1,021,540,066.21\n"
+    cut, cue = S._bound_to_statement(body)
+    assert cue == "" and cut == body
+
+
+@pytest.fixture
+def real_report_cache(monkeypatch):
+    """把 `report_cache.cache_dir()` 指回**仓内真实缓存**。
+
+    本模块在导入时把 `CNREPORT_CACHE_DIR` 指到临时目录（免得测试往仓里写），
+    但下面两条用例要核的是真报告里的跨表污染 ⇒ 得临时改回来；仓内没有缓存就 skip。
+    """
+    import report_cache as R
+    real = Path(__file__).resolve().parent / ".cache" / "reports"
+    if not real.is_dir() or not list(real.glob("600965_2024_*_selection.json")):
+        pytest.skip("仓内没有 600965/2024 的缓存（未跑过取数）")
+    monkeypatch.setattr(R, "cache_dir", lambda: real)
+    return real
+
+
+def test_equity_statement_subjects_are_not_reachable_through_cashflow(real_report_cache):
+    """权益变动表/附注的科目不许经 cashflow 取到（红证：去掉裁剪即取到数字）。
+
+    600965/2024 实测：不裁剪时区段 1067 行，第 282 行起是 `合并所有者权益变动表`，
+    里面有 `利润分配` / `综合收益总额` 这些科目。
+    """
+    import series_export as S
+    for subj in ("利润分配", "综合收益总额"):
+        with pytest.raises(S.SeriesExportError):
+            S.subject_series_offline("600965", 2024, subj, statement="cashflow")
+
+
+def test_wrapped_three_char_fragment_merges_into_its_label():
+    """`经营活动产生的现金流` + `量净额`（3 字）必须拼回一个科目名。
+
+    阈值写 2 时它不合并 ⇒ 键成了「量净额」，合并表那行进不了正确的键，而同名键只由
+    后面的母公司表提供 ⇒ 面板显示母公司数、页码却是合并表的页。
+    """
+    import series_export as S
+    text = ("经营活动产生的现金流\n量净额\n103,672,405.28 34,996,611.49\n"
+            "一、营业总收入\n1,021,540,066.21\n")
+    got = S.parse_subject_rows(text)
+    assert got["经营活动产生的现金流量净额"] == 103672405.28, got
+    assert "量净额" not in got
+    assert got["一、营业总收入"] == 1021540066.21, "带序号的真科目不许被当成碎片合并"
+
+
+def test_statement_values_are_merged_scope_and_unchanged(real_report_cache):
+    """裁剪+合并修正后：12 格只有一格变（跨表污染被更正），其余逐字不变。"""
+    import series_export as S
+    cases = [
+        (("600519", 2023), "income_statement", "营业总收入", 150560330316.45, 63),
+        (("600519", 2023), "income_statement", "营业收入", 147693604994.14, 63),
+        (("600519", 2023), "balance_sheet", "资产总计", 272699660092.25, 58),
+        (("600519", 2023), "balance_sheet", "负债合计", 49043190797.43, 58),
+        (("600519", 2023), "cashflow", "经营活动产生的现金流量净额", 66593247721.09, 66),
+        (("600965", 2024), "income_statement", "营业总收入", 1021540066.21, 92),
+        (("600965", 2024), "balance_sheet", "资产总计", 2601046849.68, 88),
+        (("600965", 2024), "balance_sheet", "负债合计", 419217955.22, 88),
+        # 唯一被更正的一格：母公司 −60,698,503.96 → 合并 103,672,405.28（原文 5548–5550 行）
+        (("600965", 2024), "cashflow", "经营活动产生的现金流量净额", 103672405.28, 95),
+    ]
+    bad = []
+    for (code, year), stmt, subj, want, page in cases:
+        p = S.subject_series_offline(code, year, subj, statement=stmt)
+        if abs(p.value - want) > 0.005 or p.page != page:
+            bad.append((code, year, stmt, subj, p.value, p.page, want, page))
+    assert not bad, bad

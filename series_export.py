@@ -30,6 +30,9 @@ STATEMENTS = {
 #: 数值行判据。巨潮 PDF 抽出来是「一格一行」，数值形如 `1,234,567.89` 或 `-123.45`。
 _NUM = re.compile(r"^-?[\d,]+\.\d{2}$")
 
+#: 带序号的科目名（`一、…` / `1.…` / `（一）…`）：这类是**真科目**，不许当续行碎片合并。
+_ENUMERATED = re.compile(r"^(?:[一二三四五六七八九十]+[、.．]|\d+[、.．]|[（(][一二三四五六七八九十\d]+[）)])")
+
 
 class SeriesExportError(RuntimeError):
     """导出失败。带公司/年份/报表/科目与原因——绝不静默返回空。"""
@@ -90,11 +93,22 @@ def parse_subject_rows(text: str) -> dict[str, float]:
         if line.isdigit() and len(line) <= 3:
             continue          # 附注号，不构成新行
         # 续行：上一行还是空值行，且本行像是被切断的后半截。
-        # 两种形态都见过（真机样本）：
-        #   `销售商品、提供劳务收到的现` + `金`                  —— 短碎片
+        # 三种形态都见过（真机样本）：
+        #   `销售商品、提供劳务收到的现` + `金`                  —— 短碎片（≤2 字）
         #   `1.归属于母公司股东的净利润` + `（净亏损以"-"号填列）`  —— 括号开头
-        # 只在「上一行无值」时合并，所以不会把两个各有数值的相邻科目粘在一起。
-        if rows and not rows[-1][1] and (len(line) <= 2 or line[0] in "（("):
+        #   `经营活动产生的现金流` + `量净额`                    —— **3 字碎片**
+        # 第三类是 2026-11-17 抓到的真缺陷：阈值写 2 时它不合并，键就成了「量净额」，
+        # 于是**合并报表那一行根本没进正确的键**，而同名键只能由后面母公司报表提供
+        # ⇒ 面板上 600965/2024「经营现金流净额」显示 −60,698,503.96（母公司）
+        # 而页码写的是合并表的 95 页（正确值是 103,672,405.28）。见
+        # openspec change `cnreport-statement-slice-bound`。
+        # 只在「上一行无值」时合并，所以不会把两个各有数值的相邻科目粘在一起；
+        # 冒号/序号开头（`一、`、`（一）`、`1.`）的仍是真科目，不合并。
+        if rows and not rows[-1][1] and (
+            len(line) <= 2
+            or line[0] in "（("
+            or (len(line) <= 4 and not _ENUMERATED.match(line))
+        ):
             rows[-1][0] += line
             continue
         rows.append([line, []])
@@ -239,6 +253,37 @@ def refresh_selection(stock_code: str, year: int, *, form: str = "年度报告")
     return payload
 
 
+#: 报表标题行：`合并/母公司` + 四张表之一，独立成行（正文里就是这样排的）。
+#: **只认报表标题，不认裸「附注」**：每张表的列头是「项目 / 附注 / 本期…」，
+#: 渲染成文本后 `附注` 会独立成行——实测落在区段第 3–7 行，拿它当边界会把 305 行的
+#: 利润表砍到第 4 行，比不裁还糟。
+_STATEMENT_TITLE = re.compile(
+    r"^\s*(?:合并|母公司)?\s*(?:资产负债表|利润表|现金流量表|所有者权益变动表)\s*$"
+)
+
+#: 跳过区段开头若干行：本条报表自己的标题也在开头，别把它当边界。
+_BOUND_HEAD_LINES = 2
+
+
+def _bound_to_statement(body: str) -> tuple[str, str]:
+    """把区段裁到**下一张报表的标题**之前，返回 ``(裁剪后正文, 触发裁剪的标题)``。
+
+    为什么必须有这一层：三大表的最后一张（现金流量表）在章节目录里常常**没有后继条目**
+    （600965/2024 的目录只有资产负债表/利润表/现金流量表三条，`合并所有者权益变动表`
+    根本不在目录里），此时 ``extract_section_text`` 回退到「切到文末」⇒ 现金流量表的
+    区段里装进了权益变动表与全部附注（实测 1067 行，第 282 行起是 `合并所有者权益变动表`）。
+    ``parse_subject_rows`` 只按标签认行，于是附注里同名标签（如「61、营业收入和营业成本」）
+    会被当成报表科目**静默返回错数**——而 `announcement_id` 与页码全都看起来正常。
+
+    副作用是好的：裁剪点在 `母公司xx表` 之前，本函数只留下**合并口径**那张表。
+    """
+    lines = body.splitlines()
+    for i in range(_BOUND_HEAD_LINES, len(lines)):
+        if _STATEMENT_TITLE.match(lines[i]):
+            return "\n".join(lines[:i]), lines[i].strip()
+    return body, ""
+
+
 def load_selection(
     stock_code: str, year: int, *, form: str = "年度报告", statement: str = "",
 ) -> dict:
@@ -347,7 +392,17 @@ def subject_series_offline(
             offsets = None
 
     body = T.extract_section_text(text, outline, entry, page_offsets=offsets or None)
+    body, cut_at = _bound_to_statement(body)
     values = parse_subject_rows(body)
+
+    if not values:
+        # 裁剪后一个科目都没有 ⇒ 判不出。不返回空序列、也不把整份文档当报表：
+        # 「这份报告里这张表切不出来」与「这张表里没有这个科目」是两件事。
+        raise SeriesExportError(
+            stock_code, year, statement, subject,
+            f"判不出：区段裁剪后没有解析出任何科目（切到 {cut_at or '文末'}）"
+            "——可能是切章过度或边界误判，不补零",
+        )
 
     if exact:
         if subject not in values:
