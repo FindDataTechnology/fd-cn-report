@@ -239,15 +239,23 @@ def refresh_selection(stock_code: str, year: int, *, form: str = "年度报告")
     return payload
 
 
-def load_selection(stock_code: str, year: int, *, form: str = "年度报告") -> dict:
-    """**纯本地**：读冻结的选版决策。缺失即报错，不联网重查。"""
+def load_selection(
+    stock_code: str, year: int, *, form: str = "年度报告", statement: str = "",
+) -> dict:
+    """**纯本地**：读冻结的选版决策。缺失即报错，不联网重查。
+
+    ``statement`` 只用于**报错里的报表名**：选版是「公司×年度×报告类型」一级的事，
+    与具体报表无关，但 spec 要求未命中错误带**报表**。不传时该槽位留空——
+    第一版直接把 ``form``（「年度报告」）塞进报表槽位，于是错误读起来像
+    `600519/2019/年度报告/:`，「报表」那一格永远不是报表名。
+    """
     import json
 
     path = selection_path(stock_code, year, form=form)
     if not path.exists():
         raise SeriesExportError(
-            stock_code, year, form, "",
-            f"选版决策未冻结（缺 {path.name}）——先跑 "
+            stock_code, year, statement, "",
+            f"缓存未命中：选版决策未冻结（缺 {path.name}）——先跑 "
             f"`python3 series_export.py --refresh {stock_code} {year}`",
         )
     return json.loads(path.read_text(encoding="utf-8"))
@@ -291,17 +299,17 @@ def subject_series_offline(
     import json
     import report_cache as R
 
-    sel = load_selection(stock_code, year, form=form)
+    sel = load_selection(stock_code, year, form=form, statement=statement)
     aid = sel.get("announcement_id") or ""
     if not aid:
         raise SeriesExportError(stock_code, year, statement, subject,
-                                "sidecar 里没有 announcement_id")
+                                "缓存未命中：sidecar 里没有 announcement_id")
 
     text_path = R.cache_dir() / f"{sel['stock_code']}_{year}_{form}_{aid}.txt"
     if not text_path.exists():
         raise SeriesExportError(
             stock_code, year, statement, subject,
-            f"正文不在缓存（缺 {text_path.name}）——先跑取数把正文抓下来",
+            f"缓存未命中：正文不在缓存（缺 {text_path.name}）——先跑取数把正文抓下来",
         )
     text = text_path.read_text(encoding="utf-8", errors="replace")
 

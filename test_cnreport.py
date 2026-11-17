@@ -1705,3 +1705,21 @@ def test_match_subject_falls_back_to_first_containing():
 def test_match_subject_returns_none_when_absent():
     import series_export as S
     assert S._match_subject("不存在的科目", {"资产总计": 1.0}) is None
+
+
+def test_offline_miss_names_company_year_statement_and_says_cache_miss():
+    """spec「缓存里没有该期报告」：错误带公司、年份、**报表**与「缓存未命中」。
+
+    2026-11-17 实测两处不达标：
+    ① 措辞里没有「缓存未命中」四个字（只有「选版决策未冻结」）；
+    ② 报表那一格塞的是 `form`（「年度报告」），不是 `income_statement`
+       ——读起来像 `600519/2019/年度报告/:`。
+    """
+    import series_export as S
+    with pytest.raises(S.SeriesExportError) as exc:
+        S.subject_series_offline("999998", 1991, "营业收入",
+                                 statement="income_statement")
+    msg = str(exc.value)
+    assert "缓存未命中" in msg, msg
+    assert "999998" in msg and "1991" in msg, msg
+    assert "income_statement" in msg, f"报表槽位不是报表名：{msg}"
