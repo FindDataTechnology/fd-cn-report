@@ -1561,3 +1561,100 @@ def test_query_announcements_rejects_bad_date(monkeypatch):
         cninfo_client.query_announcements(
             "600519", "gssh0600519", since="2026/10/01"
         )
+
+
+# ── filing selection discipline (更正公告 vs 更正后报告) ──────────────
+# Live case, 福成股份 600965 2024: CNINFO returns the 更正 notice and the
+# corrected report on the same day, notice first. Picking filings[0] used to
+# land on the notice and lose all three statements.
+
+
+def _correction_case():
+    """The real 600965 2024 ordering: notice, corrected, summary, original."""
+    return [
+        {"title": "福成股份：关于更正《2024年年度报告》的公告",
+         "announcement_id": "1223057356"},
+        {"title": "福成股份：2024年年度报告（更正后）", "announcement_id": "1223057355"},
+        {"title": "福成股份：2024年年度报告摘要", "announcement_id": "1222868634"},
+        {"title": "福成股份：2024年年度报告", "announcement_id": "1222868625"},
+    ]
+
+
+def test_pick_report_filing_skips_correction_notice():
+    picked = T._pick_report_filing(_correction_case())
+    assert picked["announcement_id"] == "1223057355"
+
+
+def test_pick_report_filing_keeps_query_order_without_corrections():
+    rows = [
+        {"title": "贵州茅台2023年年度报告", "announcement_id": "a"},
+        {"title": "贵州茅台2023年年度报告摘要", "announcement_id": "b"},
+    ]
+    assert T._pick_report_filing(rows)["announcement_id"] == "a"
+
+
+def test_pick_report_filing_falls_back_when_only_notices():
+    rows = [{"title": "关于更正《2023年年度报告》的公告", "announcement_id": "only"}]
+    # Never return empty: a bad pick stays visible, an empty pick hides it.
+    assert T._pick_report_filing(rows)["announcement_id"] == "only"
+
+
+def test_pick_report_filing_tolerates_missing_title():
+    assert T._pick_report_filing([{"announcement_id": "x"}])["announcement_id"] == "x"
+
+
+# ── announcement-level provenance (数字必须能点回公告) ────────────────
+# 「每个数字能点回原始公告」是用户需求原文。数字级来源要 PDF 表格解析才给得
+# 出来，但公告级（id + 标题 + 发布日 + 页号）本来就有 —— 不返回等于让调用方
+# 自己去 parse pdf_url。缺它是缺陷，不是简化。
+
+
+def _fake_filings(monkeypatch, cninfo_client):
+    monkeypatch.setattr(
+        cninfo_client, "query_announcements",
+        lambda *a, **k: [{"announcement_id": "1223057355",
+                          "title": "某某：2024年年度报告（更正后）",
+                          "published": "2025-04-10",
+                          "pdf_url": "http://example.invalid/a.pdf"}],
+    )
+
+
+def test_get_financial_statements_returns_announcement_provenance(monkeypatch):
+    import cninfo_client
+    import cnreport_tools as T2
+
+    monkeypatch.setattr(cninfo_client, "lookup_company",
+                        lambda t: {"stock_code": "600965", "name": "福成股份",
+                                   "org_id": "gssh0600965", "exchange": "sse"})
+    _fake_filings(monkeypatch, cninfo_client)
+    seen = {}
+
+    def fake_get_or_fetch(pdf, **kw):
+        seen.update(kw)
+        return "利润表\n营业收入 1\n", {"cached": False}
+
+    monkeypatch.setattr("report_cache.get_or_fetch", fake_get_or_fetch)
+    monkeypatch.setattr(T2, "parse_outline", lambda text: [])
+    monkeypatch.setattr(T2, "resolve_statement", lambda outline, key: None)
+
+    r = T2.get_financial_statements("600965", 2024)
+    assert r["announcement_id"] == "1223057355"
+    assert r["announcement_title"] == "某某：2024年年度报告（更正后）"
+    assert r["published"] == "2025-04-10"
+    assert seen.get("announcement_id") == "1223057355"
+
+
+def test_get_financials_declares_untraceable(monkeypatch):
+    """akshare 路径拿不到公告来源 —— 必须显式声明，不许沉默。"""
+    import cninfo_client
+    import financials_client
+    import cnreport_tools as T2
+
+    monkeypatch.setattr(cninfo_client, "lookup_company",
+                        lambda t: {"stock_code": "600519", "name": "贵州茅台",
+                                   "org_id": "gssh0600519", "exchange": "sse"})
+    monkeypatch.setattr(financials_client, "get_statements",
+                        lambda code, **kw: {"income_statement": {"columns": [], "data": []}})
+    r = T2.get_financials("600519")
+    assert r["announcement_traceable"] is False
+    assert r["source"] == "sina_akshare_aggregate"

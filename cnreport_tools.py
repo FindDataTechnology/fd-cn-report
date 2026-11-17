@@ -1026,6 +1026,38 @@ def get_company(ticker_or_name: str) -> dict:
     return row
 
 
+# ── filing selection discipline ──────────────────────────────────
+# CNINFO returns the same report's original and corrected versions side by side,
+# plus a separate 更正 notice that is NOT the report body. Query order is
+# publication-date descending, so a 更正 notice issued the same day sorts ahead
+# of the corrected report — picking filings[0] then lands on a notice with no
+# statements in it. The rule below is the same one scripts/bank_ingest.py uses
+# (and scripts/agri_ingest.py layers on top of it).
+
+_CORRECTION_NOTICE = "更正"
+_CORRECTED_SUFFIX = "更正后"
+
+
+def _pick_report_filing(filings: list[dict]) -> dict:
+    """Pick the report body: drop 更正 notices, prefer the 更正后 version.
+
+    Returns ``filings[0]`` unchanged when nothing survives, so a caller never
+    gets an empty pick — a bad pick is visible in the result, an empty pick
+    would turn into an unrelated error.
+    """
+    clean = [
+        f for f in filings
+        if not (_CORRECTION_NOTICE in (f.get("title") or "")
+                and _CORRECTED_SUFFIX not in (f.get("title") or ""))
+    ]
+    # sorted() is stable, so among equally-ranked filings the query order holds.
+    ordered = sorted(
+        clean,
+        key=lambda f: (0 if _CORRECTED_SUFFIX in (f.get("title") or "") else 1),
+    )
+    return (ordered or filings)[0]
+
+
 @_tool_safe
 def list_filings(
     ticker_or_name: str,
@@ -1098,7 +1130,16 @@ def get_financials(
     statement: Optional[str] = None,
     period: str = "annual",
 ) -> dict:
-    """Return structured income/balance/cashflow statements via akshare."""
+    """Return structured income/balance/cashflow statements via akshare.
+
+    **Not announcement-traceable.** The numbers come from Sina's aggregate
+    statement endpoint, which returns every reporting period in one table and
+    carries no link back to a specific disclosure. The response therefore
+    declares `announcement_traceable: false` instead of staying silent — a
+    caller that needs "point this number at the filing" must use
+    `get_financial_statements(ticker, year)`, which extracts from the actual
+    disclosure PDF and returns `announcement_id` + page numbers.
+    """
     import cninfo_client
     import financials_client
 
@@ -1127,12 +1168,16 @@ def get_financials(
             "company_name": company["name"],
             "period": period,
             "statement": statement,
+            "announcement_traceable": False,
+            "source": "sina_akshare_aggregate",
             **{statement: all_stmts[statement]},
         }
     return {
         "stock_code": company["stock_code"],
         "company_name": company["name"],
         "period": period,
+        "announcement_traceable": False,
+        "source": "sina_akshare_aggregate",
         **all_stmts,
     }
 
@@ -1170,7 +1215,7 @@ def get_section(
                 f"form={form!r} year={year}"
             )
         }
-    top = filings[0]
+    top = _pick_report_filing(filings)
     pdf = top["pdf_url"]
     text, cache_info = report_cache.get_or_fetch(
         pdf,
@@ -1198,6 +1243,9 @@ def get_section(
         "year": year,
         "form": form,
         "section": section,
+        "announcement_id": top.get("announcement_id") or "",
+        "announcement_title": top.get("title") or "",
+        "published": top.get("published") or "",
         "pdf_url": pdf,
         "outline_entry": entry,
         "char_count": len(body),
@@ -1272,7 +1320,7 @@ def get_special_report(
                 f"category={category!r} year={year}"
             )
         }
-    top = filings[0]
+    top = _pick_report_filing(filings)
     if section is None:
         return {
             "stock_code": company["stock_code"],
@@ -1280,6 +1328,8 @@ def get_special_report(
             "category": category,
             "year": year,
             "filings": filings,
+            "announcement_id": top.get("announcement_id") or "",
+            "announcement_title": top.get("title") or "",
             "pdf_url": top["pdf_url"],
         }
     # Section extraction — via the cache-aware fetch path (no duplication).
@@ -1306,6 +1356,8 @@ def get_special_report(
         "category": category,
         "year": year,
         "section": section,
+        "announcement_id": top.get("announcement_id") or "",
+        "announcement_title": top.get("title") or "",
         "pdf_url": pdf,
         "outline_entry": entry,
         "char_count": len(body),
@@ -1354,7 +1406,7 @@ def get_financial_statements(
                 f"form={form!r} year={year}"
             )
         }
-    top = filings[0]
+    top = _pick_report_filing(filings)
     pdf = top["pdf_url"]
     text, cache_info = report_cache.get_or_fetch(
         pdf,
@@ -1387,6 +1439,12 @@ def get_financial_statements(
         "company_name": company["name"],
         "year": year,
         "form": form,
+        # Announcement-level provenance, so every number below can be traced back
+        # to the exact disclosure it was extracted from. `pdf_url` encodes the
+        # same id; keeping both means a caller does not have to parse a URL.
+        "announcement_id": top.get("announcement_id") or "",
+        "announcement_title": top.get("title") or "",
+        "published": top.get("published") or "",
         "pdf_url": pdf,
         "cached": cache_info["cached"],
         "statements": statements,
