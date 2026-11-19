@@ -25,8 +25,8 @@ Env:
                        (organized by stock_code: {save_dir}/{stock_code}/{stem}.pdf)
   MINIO_UPLOAD_ENABLED — "true" to enable MinIO upload (default: disabled)
   MINIO_ENDPOINT     — MinIO server endpoint (e.g., "localhost:9000")
-  MINIO_ACCESS_KEY   — MinIO access key (default: "minioadmin")
-  MINIO_SECRET_KEY   — MinIO secret key (default: "minioadmin")
+  MINIO_ACCESS_KEY   — MinIO access key (required)
+  MINIO_SECRET_KEY   — MinIO secret key (required)
   MINIO_BUCKET       — MinIO bucket name (default: "fd-cn-reports")
   MINIO_SECURE       — "true" for HTTPS (default: "false")
 
@@ -79,8 +79,13 @@ def _upload_minio(raw: bytes, object_key: str) -> None:
     try:
         from minio import Minio  # type: ignore[import-not-found]
 
-        access_key = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
-        secret_key = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
+        # No defaults: "minioadmin" is the well-known default for a fresh MinIO server, so
+        # a fallback here would mean this code works against an unconfigured deployment —
+        # and publishes that credential in a public repository.
+        access_key = os.environ.get("MINIO_ACCESS_KEY")
+        secret_key = os.environ.get("MINIO_SECRET_KEY")
+        if not access_key or not secret_key:
+            raise RuntimeError("MINIO_ACCESS_KEY and MINIO_SECRET_KEY must both be set")
         secure = os.environ.get("MINIO_SECURE", "false").lower() == "true"
         bucket = os.environ.get("MINIO_BUCKET", "fd-cn-reports")
 
