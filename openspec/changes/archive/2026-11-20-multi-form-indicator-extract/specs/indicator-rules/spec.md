@@ -7,6 +7,14 @@ The system SHALL load an indicator rule set from `indicator_rules.json`. Each ru
 - **WHEN** a `report` rule for 资本充足率 declares `selectors: [{company: ["601398"], section: "三、资本充足率分析"}, {section: "资本充足率"}, {section: "风险管理", fallback: true}]`
 - **THEN** for 工商银行 the engine tries `三、资本充足率分析` first; for any other bank it tries `资本充足率` first, then `风险管理`.
 
+#### Scenario: Script rule dispatches via the registry
+- **WHEN** a rule for 利息收入 has a matching `script_rules` row with `extract_rule: "table_row"`
+- **THEN** the engine dispatches to the registered `table_row` extractor with the section text + rule, returns `{value, unit, note}`, and makes no LLM call.
+
+#### Scenario: LLM rule dispatches via the LLM batch path
+- **WHEN** a `report` rule has no matching `script_rules` row
+- **THEN** the engine dispatches it through the LLM batch path with `extractor: "llm"`.
+
 #### Scenario: computed rule with formula and inputs
 - **WHEN** a `computed` rule declares `{formula: "不良贷款余额 / 贷款和垫款总额 * 100", inputs: ["不良贷款余额", "贷款和垫款总额"]}`
 - **THEN** the engine evaluates the formula locally once both inputs are resolved, and never sends arithmetic to the LLM.
@@ -23,8 +31,20 @@ The system SHALL load an indicator rule set from `indicator_rules.json`. Each ru
 - **WHEN** a hand-authored banking rule carries no `report_type` field and `extract_indicators_by_position(form="第一季度报告")` is called
 - **THEN** the rule is treated as `年报/半年报/季报`, `季报` is a substring, and the rule is attempted (not skipped) for the Q1 form.
 
-### Requirement: Section resolution walks selectors with body-text fallback
+### Requirement: Section resolution walks the selector chain
 The engine SHALL resolve a `report` rule's section by walking its `selectors[]` chain via `resolve_selector` (exact → normalized leading-keyword substring → regex) against the parsed outline, trying company-filtered selectors first. When no selector matches AND the rule's module is a statement module (`balance_sheet` / `income_statement` / `cashflow`), the engine SHALL fall back to searching the raw report text for the canonical statement title (`合并资产负债表` / `合并利润表` / `合并现金流量表`, then the un-prefixed `资产负债表` / `利润表` / `现金流量表`, then the bank quarterly variant `合并及公司资产负债表` / `合并及公司利润表` / `合并及公司现金流量表`), slicing from the title line to the next statement title or top-level numbered heading. The fallback SHALL only activate when outline resolution returns nothing, so reports whose outlines contain statement titles (annual, semi-annual) are unaffected.
+
+#### Scenario: Company-specific selector wins
+- **WHEN** the first `selectors[]` entry has `company: ["601398"]` and the target is 601398 and its section is in the TOC
+- **THEN** that selector is used and later entries are not tried.
+
+#### Scenario: Fallback to default selector
+- **WHEN** the company-specific selector's section is not in the TOC but the next (default) entry's section is
+- **THEN** the default selector is used.
+
+#### Scenario: No selector hits
+- **WHEN** no `selectors[]` entry matches a section in the parsed TOC
+- **THEN** the indicator is listed in `missing` with the tried selectors recorded, and no extractor runs.
 
 #### Scenario: Annual report resolves via outline
 - **WHEN** a `balance_sheet` rule is resolved against the 工商银行 2023 年度报告 (outline contains `合并资产负债表`)

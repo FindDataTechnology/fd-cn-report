@@ -1,5 +1,11 @@
 ## Why
 
+> **归档说明（2026-11-20）**：本 change 于 2026-07-07 立项，次日 `2026-07-08-db-backed-rules-pipeline`
+> 已归档并实际落地了同一目标（`indicators_models._build_registry()` 从规则库读行重建
+> Pydantic 注册表、`call_llm_pydantic` 为唯一结构化出口）。本 change 的 delta 文件仍用
+> 非法能力名（`delta-indicator-*`），且其「BREAKING: 结果改 DataFrame」一项经复核未采用。
+> 结论：被取代，不再实施。
+
 The current pipeline uses 6 different extractor types (`python:table_row`, `llm`, `python:percent_value`, `python:headcount`, `auto`, `computed`) scattered across 321 rules. The Python extractors (`python:table_row` — 186 rules) use fragile regex heuristics that return wrong values (e.g., row indices instead of actual figures) and have near-zero test coverage. LLM calls use freeform JSON prompting with no schema validation — the LLM can return malformed or missing fields silently. As the rule set grows, this extraction spaghetti becomes unmaintainable. A single, Pydantic-validated LLM extraction path eliminates regex fragility, guarantees structured output, and makes rule maintenance mechanical.
 
 ## What Changes

@@ -8,7 +8,7 @@
 
 - [x] 2.1 Add `find_statement_in_text(text, module)` — searches raw report text for the canonical statement title (`合并资产负债表` → `资产负债表` → `合并及公司资产负债表` for balance_sheet; analogously for income_statement / cashflow). Returns `(start_offset, end_offset)` slicing from the title line to the next statement title or top-level numbered heading (`第X节` / `一、` at line start).
 - [x] 2.2 Add `extract_statement_text(text, module)` wrapping `find_statement_in_text` to return the sliced body string (or `None` when the title isn't found).
-- [ ] 2.3 Unit-test the helper against ICBC Q1 (title `合并及公司资产负债表–按中国会计准则编制`) and 茅台 Q1 (title `合并资产负债表`) cached texts.
+- [x] 2.3 Unit-test the helper against ICBC Q1 (title `合并及公司资产负债表–按中国会计准则编制`) and 茅台 Q1 (title `合并资产负债表`) cached texts.
 
 ## 3. Engine: `form` parameter + `report_type` filter (`indicators_client.py`)
 
