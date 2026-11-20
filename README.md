@@ -490,3 +490,38 @@ fd-cn-report/
 ## License
 
 MIT
+## 文档地图
+
+`docs/` 下 9 篇 md 加一批数据表。这个仓的文档有个特点：**方法论比代码长**
+（`indicators-methodology.md` 65K），因为判据本身就是资产。
+
+**方法论与分类学**
+
+| 文档 | 一句话 |
+|---|---|
+| `docs/indicators-methodology.md` | 65K，指标抽取与归一的完整方法论（核心文档） |
+| `docs/taxonomy-guide.md` | 行业分类怎么用 |
+| `docs/taxonomy-schema-extension.md` | 扩展分类 schema 时改什么 |
+| `docs/taxonomy-upgrade-summary.md` | 一次分类升级的记录 |
+| `docs/industry_rules_workflow.md` | 行业规则的生成流程 |
+| `docs/dedup-llm-rules-entity-industry.md` | LLM 规则去重 |
+
+**单一报告的字段定位**
+
+| 文档 | 一句话 |
+|---|---|
+| `docs/icbc_2023_indicator_locations.md` | 工行 2023 年报里各指标的页码与位置 |
+| `docs/indicators-coverage.md` | 覆盖率统计说明 |
+
+**数据表**（csv/json，是上面方法论的可复核输入）
+
+| 文件 | 是什么 |
+|---|---|
+| `docs/golden-bank-indicators.json` `golden-bank-money-gta.json` | 金标准样本 |
+| `docs/indicators_all_info.csv` `indicators_lost.csv` `indicators_status.csv` `indicators_position.csv` | 全部指标 / 丢失的 / 状态 / 位置 |
+| `docs/bank-indicator-concepts.json` `bank-money-concepts.json` `bank-money-indicator-sources.json` | 概念与来源映射 |
+| `docs/industry_indicator_baseline.json` `industry_taxonomy.json` `industry_support_report.json` `industry_seed_support.json` | 行业基线与分类 |
+| `docs/report_section_map.json` | 财报章节映射 |
+| `docs/icbc_2023_outline.json` `icbc_2023_indicator_positions.csv` | 单一报告的抽取结果 |
+
+新增文档请同时更新本表——`fd-infra-deploy/tools/check_doc_map.py` 会核一致性。
