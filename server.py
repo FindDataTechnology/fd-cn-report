@@ -1402,6 +1402,20 @@ class BearerAuthMiddleware:
         if hmac.compare_digest(provided, expected):
             return self.asgi_app(scope, receive, send)
 
+        # Delegation-grant track (establish-agent-principal-plane 5.2): accept a
+        # valid offline-verified grant as an alternative to the shared bearer, so
+        # the line is consumable directly, without the gateway in the path. Off
+        # unless GRANT_VERIFY_ENABLED; a shared-bearer line is unchanged.
+        if provided.startswith(b"Bearer "):
+            candidate = provided[len(b"Bearer "):].decode("utf-8", "surrogateescape")
+            try:
+                from grant_verify import looks_like_grant, verify_grant
+
+                if looks_like_grant(candidate) and verify_grant(candidate):
+                    return self.asgi_app(scope, receive, send)
+            except Exception:  # noqa: BLE001 - grant path is optional; never crash
+                pass
+
         async def _reject(receive, send):
             await send(
                 {

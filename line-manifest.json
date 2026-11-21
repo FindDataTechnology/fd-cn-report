@@ -23,6 +23,15 @@
       "enforced": false,
       "migration_task": "converge-line-identity-and-keys#8.3",
       "note": "目标态：客户拿词元钥匙直打本线。今天非 `MCP_BEARER_TOKEN` 的 bearer 一律 401。"
+    },
+    {
+      "kind": "grant",
+      "name": "delegation-grant",
+      "jwks_uri": "https://mcp.finddatatech.cloud/.well-known/grant-jwks.json",
+      "aud": "fd-cn-report",
+      "fallback": false,
+      "enforced": true,
+      "note": "委托平面（establish-agent-principal-plane）：单 aud 短命令牌，离线 JWKS 验签。本线已具备直连验签（grant_verify.py，env GRANT_VERIFY_ENABLED/GRANT_JWKS_URL/GRANT_AUD 开启；test_grant_verify.py 证直连可过、错 aud/异钥被拒）。网关侧验签+双发记账亦已就绪。回退仍由 line-native 承担，grant 不充当唯一回退。"
     }
   ],
   "scopes": [
