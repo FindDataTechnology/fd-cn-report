@@ -12201,7 +12201,8 @@
     {
       "name": "预收账款",
       "aliases": [
-        "Advances from Customers"
+        "Advances from Customers",
+        "预收款项"
       ],
       "module": "balance_sheet",
       "subgroup": "二、负债",
