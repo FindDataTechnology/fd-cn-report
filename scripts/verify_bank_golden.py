@@ -35,19 +35,48 @@ GOLDEN = _REPO / "docs" / "golden-bank-indicators.json"
 CACHE_DIR = _REPO / ".cache" / "reports"
 
 
+def _cache_values(code: str, year: int, form: str) -> int:
+    """该报告的抽取缓存里**真正有值**的指标条数（文件在但全是 None 也算 0）。
+
+    2026-11-22 实撞：旧判据只看「`.indicators.json` 文件在不在」。而一次**无 key 时
+    跑出来的缓存**同样会落盘——里面每项都是 `{"value": None, "extractor": "llm"}`。
+    于是闸把「环境缺 key」整片渲染成「✗ 对位失败」：90 条锚 87 条红，而根因跟抽取
+    质量毫无关系。实测这几份缓存：601398 年度 15 项 0 个值、601288 年度 15 项 0 个值、
+    600036 年度 15 项 0 个值，只有 601398 半年度 16 项全有值。
+    """
+    hits = sorted(CACHE_DIR.glob(f"{code}_{year}_{form}_*.indicators.json"))
+    best = 0
+    # 同一份报告可能有多份缓存（不同 rules_hash / 不同 run）。取**有值最多的那份**，
+    # 不取 sorted()[0]——否则一份无 key 时跑出来的空缓存会盖住旁边有值的那份，
+    # 闸又会把「环境」读成「抽取缺陷」。
+    for h in hits:
+        try:
+            doc = json.loads(Path(h).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        inds = doc.get("indicators") or {}
+        best = max(best, sum(1 for v in inds.values()
+                             if isinstance(v, dict) and v.get("value") is not None))
+    return best
+
+
 def _llm_blocked(prompts: dict) -> list[str]:
-    """找出「需要 LLM 但当前没有可用 key」的报告单。
+    """找出「这次必然拿不到值」的报告单：没有 key，且缓存里也没有可用值。
 
     抽取是**失败软**的：没有 LLM key 时它不抛错，而是把每项都记成 `None`，
     于是本闸会把**环境缺失**渲染成一整片「✗ 对位失败」——与真的抽取坏掉长得一样
     （2026-11-08 实测：601398 的 `.indicators.json` 缺失 + 未配 key ⇒ anchors=90 fail=15；
-    补上 key 重跑即 fail=0）。故开跑前先把这两种情况分辨开。
+    补上 key 重跑即 fail=0）。
+
+    判据是「**有没有 key** 与「缓存里**有没有值**」的析取，不是「缓存文件在不在」。
+    文件在、里面全是 None 的形态（无 key 时跑出来的）必须算 blocked——否则闸会拿
+    环境问题冒充抽取缺陷。
     """
-    if os.environ.get("LLM_API_KEY"):
+    if os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY"):
         return []
     blocked = []
     for code, year, form in prompts:
-        if not list(CACHE_DIR.glob(f"{code}_{year}_{form}_*.indicators.json")):
+        if _cache_values(code, year, form) == 0:
             blocked.append(f"{code} {year} {form}")
     return blocked
 
