@@ -50,6 +50,16 @@
     **缺的那一半**：`.cache/` 是 gitignored，语料**不在仓里**；且抽样只覆盖银行，
     其余 43 个 document_type 没有锚。入仓要选「够小 + 许可干净」的样本，
     是内容决定（同 5.2 的取舍连在一起），下一轮做。
-- [ ] 5.2 Add an automated smoke test that runs extraction for the golden corpus and asserts baseline indicator presence
+- [x] 5.2 Add an automated smoke test that runs extraction for the golden corpus and asserts baseline indicator presence
+  - **2026-11-22 完成**（`480b4d4`）：`tests/test_golden_smoke.py` 7 条。
+    与原文的差异要写清：它断言的是**判定链**，不是「抽取取到了值」——
+    后者在没有 LLM key 的机器上等于测环境，那种断言会让 CI 常年红或常年跳过。
+    具体覆盖：锚文件合法性（90 条、字段齐）、`disclose_status` 把
+    「无值」正确分成「未披露 / 对位失败」四向、90 条锚每条都走完判定链并落到
+    已定义结局、脚本规则在 python 模式下显式标 skipped 而不退回 LLM。
+  - **反向验证过**（证明断言真能红）：把 `return "对位失败"` 改成 `"未披露"` ⇒ 1 failed；
+    把 python 模式的 skipped note 改成空串 ⇒ 1 failed；两次都还原后复绿。
+  - **仍未覆盖的那半**：LLM 真抽取。要它跑起来需要 ①chat 端点可用（当前上游
+    account 46 返回 502）②金集语料入仓（5.1）。两条都是外部条件。
 - [x] 5.3 Add a CI-friendly report (per document_type) showing pass/fail and missing indicators to guide rule iteration
 
