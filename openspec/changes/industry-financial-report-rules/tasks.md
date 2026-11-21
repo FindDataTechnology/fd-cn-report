@@ -39,6 +39,16 @@
 ## 5. Smoke testing and regression protection
 
 - [ ] 5.1 Create a small golden PDF corpus per initial industry/document_type (or approved sample pages) for smoke tests
+  - **2026-11-22 状态：语料与考核口径已就位，缺的是「入仓」。**
+    语料侧：`.cache/reports/` 里已有 117 份真报告（PDF + 抽好的 `.txt`/`.outline.json`），
+    覆盖银行（601398/600036/601288/601939/000001）与非银行（002041/600519/600965/002714…），
+    且**已有 8 份 `.indicators.json` 抽取产物**（18 项指标各 18 个非空值）。
+    考核口径：`docs/golden-bank-indicators.json` 是 18 项 × 5 家 = 90 条人工核过的锚，
+    `scripts/verify_bank_golden.py` 已能「重新抽一遍再逐值比对」，并把「未披露」与
+    「对位失败」分开判（前者正常、后者非零退出）——这正是本条要的判据形状。
+    **缺的那一半**：`.cache/` 是 gitignored，语料**不在仓里**；且抽样只覆盖银行，
+    其余 43 个 document_type 没有锚。入仓要选「够小 + 许可干净」的样本，
+    是内容决定（同 5.2 的取舍连在一起），下一轮做。
 - [ ] 5.2 Add an automated smoke test that runs extraction for the golden corpus and asserts baseline indicator presence
 - [x] 5.3 Add a CI-friendly report (per document_type) showing pass/fail and missing indicators to guide rule iteration
 
