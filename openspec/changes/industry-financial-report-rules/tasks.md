@@ -59,10 +59,11 @@
     —— 年报摘要形态（本期 vs 上年同期口径），并把 `test_golden_corpus_fixture.py` 改为
     **遍历 `fixtures/golden/*.json`**（含「至少一份语料」空集合守卫），新增语料只需放
     .txt + .json 即被自动覆盖。验证：test_golden_smoke + test_golden_corpus_fixture 16 passed。
-    **仍未覆盖的**：抽样仍只有两家（一家季报 + 一家年报；银行侧另有 90 条人工锚，但那批的
-    语料在 `.cache/` 未入仓）；其余 document_type 没有锚。这条**保持未勾**，等覆盖面真正扩到
-    「per initial industry/document_type」——现在只做到「两份可判样本、覆盖两种报告形态」，
-    不等于任务书说的「每个初始行业各一份」。
+    **已入仓第三份**（2026-11-23）：`tests/fixtures/golden/605198_2025_q3.{txt,json}` ——
+    果汁制造季报，覆盖「本期与累计两值同表两行并列」版式（最易把列序读反）。13 passed。
+    **仍未覆盖的**：抽样三家（海产季报 / 年报摘要 / 果汁季报），银行侧另有 90 条人工锚
+    （语料在 `.cache/` 未入仓）；其余 document_type 无锚。这条**保持未勾**——现在只做到
+    「三份可判样本、三种版式」，不等于任务书说的「每个初始行业各一份」。
 - [x] 5.2 Add an automated smoke test that runs extraction for the golden corpus and asserts baseline indicator presence
   - **2026-11-22 完成**（`480b4d4`）：`tests/test_golden_smoke.py` 7 条。
     与原文的差异要写清：它断言的是**判定链**，不是「抽取取到了值」——
