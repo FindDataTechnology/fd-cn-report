@@ -1,0 +1,39 @@
+{
+  "schema": "golden-corpus/v1",
+  "note": "最小可判语料：一份真实上市公司季报的抽取文本 + 若干人工核过的锚值。用于 5.2 的端到端烟测。刻意不含 PDF——二进制不可 review，且 .cache/ 是 gitignored；这里存的是同一份报告的纯文本快照（20KB，可逐字读）。",
+  "source": {
+    "entity_code": "600097",
+    "entity_name": "上海开创国际海洋资源股份有限公司",
+    "fiscal_year": 2025,
+    "form": "第三季度报告",
+    "document_type": "cn/801010/listed/quarterly-report",
+    "provenance": "巨潮资讯网公开披露（cninfo finalpage 1224769914）；上市公司法定公开信息",
+    "text_file": "tests/fixtures/golden/600097_2025_q3.txt",
+    "text_chars": 10048,
+    "sha256": "90384735239f09ea56f0d1811363c7cbfb6506274c3aeb772b3c904f8382d4ae"
+  },
+  "anchors": [
+    {
+      "indicator": "营业收入",
+      "value": 450167434.57,
+      "unit": "元",
+      "period_note": "本报告期（2025 Q3 单季）",
+      "evidence": "第 32-33 行：`营业收入` 紧跟 `450,167,434.57`"
+    },
+    {
+      "indicator": "营业收入",
+      "value": 1699680102.95,
+      "unit": "元",
+      "period_note": "年初至报告期末（前三季度累计）",
+      "evidence": "第 35 行：`1,699,680,102.95`（同行第 36 行 `-1.74` 是同比）"
+    },
+    {
+      "indicator": "利润总额",
+      "value": 36985740.85,
+      "unit": "元",
+      "period_note": "本报告期",
+      "evidence": "第 37-38 行：`利润总额` 紧跟 `36,985,740.85`"
+    }
+  ],
+  "why_these_three": "选它们的判据是「原文里能一字不差地指到数字，且同一个指标在一份报告里有两种期间口径」。后者正是抽取最容易错的地方——把单季值当成累计值（或反之）不会报错，只会给出一个看起来合理的错数。"
+}
