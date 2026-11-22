@@ -47,9 +47,17 @@
     考核口径：`docs/golden-bank-indicators.json` 是 18 项 × 5 家 = 90 条人工核过的锚，
     `scripts/verify_bank_golden.py` 已能「重新抽一遍再逐值比对」，并把「未披露」与
     「对位失败」分开判（前者正常、后者非零退出）——这正是本条要的判据形状。
-    **缺的那一半**：`.cache/` 是 gitignored，语料**不在仓里**；且抽样只覆盖银行，
-    其余 43 个 document_type 没有锚。入仓要选「够小 + 许可干净」的样本，
-    是内容决定（同 5.2 的取舍连在一起），下一轮做。
+    **已入仓第一份**（`f5c83bd`）：`tests/fixtures/golden/600097_2025_q3.{txt,json}` ——
+    一份真实季报的**纯文本快照 + 三个锚**，配 `tests/test_golden_corpus_fixture.py` 6 条判据。
+    选它的三条判据（写进了 json 里，后续加样本照此办）：
+      · **许可**：上市公司法定公开披露（巨潮 finalpage 1224769914），无授权障碍；
+      · **够小**：文本 10KB（PDF 189KB）；入仓 .txt 而非 PDF —— 二进制不可 review；
+      · **可判**：同一份报告里「营业收入」有两个期间口径（单季 / 累计），
+        拿错口径**不会报错、只会给出一个看起来合理的错数**，这正是最该被钉住的形态。
+    反向验证过：改一个字节 → 哈希条红；把 450,167,434.57 改成 999,999,999.99 → 3 条同时红。
+    **仍未覆盖的**：抽样仍只有一家（银行侧另有 90 条人工锚，但那批的语料在 `.cache/` 未入仓）；
+    其余 43 个 document_type 没有锚。这条**保持未勾**，等覆盖面真正扩到「per initial
+    industry/document_type」——现在只做到了「一份可判样本」，不等于任务书说的「每个初始行业各一份」。
 - [x] 5.2 Add an automated smoke test that runs extraction for the golden corpus and asserts baseline indicator presence
   - **2026-11-22 完成**（`480b4d4`）：`tests/test_golden_smoke.py` 7 条。
     与原文的差异要写清：它断言的是**判定链**，不是「抽取取到了值」——
