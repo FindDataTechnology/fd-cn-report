@@ -55,9 +55,14 @@
       · **可判**：同一份报告里「营业收入」有两个期间口径（单季 / 累计），
         拿错口径**不会报错、只会给出一个看起来合理的错数**，这正是最该被钉住的形态。
     反向验证过：改一个字节 → 哈希条红；把 450,167,434.57 改成 999,999,999.99 → 3 条同时红。
-    **仍未覆盖的**：抽样仍只有一家（银行侧另有 90 条人工锚，但那批的语料在 `.cache/` 未入仓）；
-    其余 43 个 document_type 没有锚。这条**保持未勾**，等覆盖面真正扩到「per initial
-    industry/document_type」——现在只做到了「一份可判样本」，不等于任务书说的「每个初始行业各一份」。
+    **已入仓第二份**（`1411d63`，2026-11-23）：`tests/fixtures/golden/600467_2025_annual.{txt,json}`
+    —— 年报摘要形态（本期 vs 上年同期口径），并把 `test_golden_corpus_fixture.py` 改为
+    **遍历 `fixtures/golden/*.json`**（含「至少一份语料」空集合守卫），新增语料只需放
+    .txt + .json 即被自动覆盖。验证：test_golden_smoke + test_golden_corpus_fixture 16 passed。
+    **仍未覆盖的**：抽样仍只有两家（一家季报 + 一家年报；银行侧另有 90 条人工锚，但那批的
+    语料在 `.cache/` 未入仓）；其余 document_type 没有锚。这条**保持未勾**，等覆盖面真正扩到
+    「per initial industry/document_type」——现在只做到「两份可判样本、覆盖两种报告形态」，
+    不等于任务书说的「每个初始行业各一份」。
 - [x] 5.2 Add an automated smoke test that runs extraction for the golden corpus and asserts baseline indicator presence
   - **2026-11-22 完成**（`480b4d4`）：`tests/test_golden_smoke.py` 7 条。
     与原文的差异要写清：它断言的是**判定链**，不是「抽取取到了值」——
