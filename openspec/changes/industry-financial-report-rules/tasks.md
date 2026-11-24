@@ -1,5 +1,8 @@
 ## 1. Taxonomy + document_type conventions
 
+> **2026-11-25 复核留任**：18/19。剩 5.1 golden PDF 语料入仓——delta 3 个新 cap 全未合主 spec。LLM 真抽取需 chat 端点可用 + 金集语料两条外部条件。
+
+
 > **2026-11-20 状态盘点（治理轮）**
 >
 > 4.3/4.4/4.5 已达成并可证：`docs/industry_support_report.json` 有 44 个 document_type
