@@ -80,3 +80,8 @@
     account 46 返回 502）②金集语料入仓（5.1）。两条都是外部条件。
 - [x] 5.3 Add a CI-friendly report (per document_type) showing pass/fail and missing indicators to guide rule iteration
 
+
+## 归档豁免
+
+归档豁免：2026-11-25 剩 5.1（golden PDF 语料按 industry/document_type 入仓供烟测）是**外部条件**非代码欠账：真抽取那半需 ①chat 端点可用（曾上游 502）②金集语料入仓两条前置，均非本机能补。
+代码侧全部交付并测试通过（2026-11-25 复跑 `test_industry_support.py` 5/5）：`industry_taxonomy.py`（1.1–1.4）、`industry_coverage.py`（2.1–2.4）、`rules_models.py`/`rules_skills.py`（3.x 工作流）、4.x 已 seed 首批行业并达 supported。delta 合入主 spec 后行为固化；语料到位后按 5.1 补烟测即可。
