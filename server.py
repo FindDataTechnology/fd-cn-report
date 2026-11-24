@@ -49,7 +49,28 @@ import wellknown  # noqa: E402  （平铺模块：仓根 wellknown.py）
 from cnreport_database import get_db, make_report_id  # noqa: E402
 
 logger = logging.getLogger("fd-cn-report")
-app = FastMCP(name="fd-cn-report")
+app = FastMCP(
+    name="fd-cn-report",
+    # 服务级路由知识。44 个工具里有一半是同构的「交易所 × 动作」笛卡尔积，
+    # 调用方每次都要在四个几乎同名的工具里挑一个——不写这段，模型只能靠猜。
+    # 只讲工具之间的选择，不讲逐个参数（那是各工具 description 的事）。
+    instructions=(
+        "中国金融研报与官方披露数据服务。按下面的顺序选工具，不要并行遍历同类。\n"
+        "• 读一家 A 股公司的年报正文：get_company（解析代码）→ list_filings（列公告）→ "
+        "get_section（取某一节正文）。get_financials / get_financial_statements 取结构化财务，"
+        "get_filing 取整份公告元数据。\n"
+        "• 六条官方/半官方数据线（sse 上交所 / szse 深交所 / bse 北交所 / csrc 证监会 / "
+        "hk 港股 / ministry 部委统计）各自独立：先按公司所在交易所选定那一条线，"
+        "再在同一线内用 get_<venue>_company → list_<venue>_filings → get_<venue>_section。"
+        "**不要**对一个交易所的公司去试另一条线的工具，那是必然的空结果。\n"
+        "• 抽取类工具（extract_section / ai_extract / extract_indicators / "
+        "extract_indicators_by_position）会调用 LLM，慢且花钱：只有确需从非结构化正文里挖字段时才用，"
+        "结构化取数一律走 get_*。\n"
+        "• search_reports 是 ES 全文检索，只覆盖曾 index_records 落库过的内容；"
+        "index_records / delete_index / clear_cache 是写面，日常问答不要在调用链里带上它们。\n"
+        "• list_report_types / list_indicators 是目录类工具：先看有什么，再决定取什么。"
+    ),
+)
 
 
 # 线自描述端点 /.well-known/line-manifest.json（change converge-line-identity-and-keys 1.4）：
