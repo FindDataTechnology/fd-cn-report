@@ -351,14 +351,21 @@
       "description": "LLM 结构化抽取：ai_extract 对分节文本按调用方给的 JSON Schema 抽记录数组（调外部 LLM，openWorld；无本地落库）。缓存与落库均由上层组合工具负责。"
     },
     {
-      "group": "es_store",
+      "group": "es_search",
       "level": "commercial",
       "tools": [
-        "delete_index",
-        "index_records",
         "search_reports"
       ],
-      "description": "ES 检索库存取（**本组非纯读**）：search_reports 全文+过滤检索（只读）；index_records 把抽取记录 bulk 落 cnreport-{year} 索引（写，幂等键 report_id+section_id）；delete_index 删整年索引及其元数据行（**destructive**，需 confirm=true）。ES 是本服务自己的库，openWorld=false。"
+      "notes": "ES 检索面：按关键词搜已索引的报告（pack 引用的唯一 ES 工具）。"
+    },
+    {
+      "group": "es_admin",
+      "level": "internal",
+      "tools": [
+        "delete_index",
+        "index_records"
+      ],
+      "notes": "ES 索引管理（建索引 / 删索引）。运维面误入 commercial，2026-11-25 降为 internal——无任何 pack 引用。"
     },
     {
       "group": "company_api",
@@ -377,12 +384,12 @@
     },
     {
       "group": "cache_mgmt",
-      "level": "commercial",
+      "level": "internal",
       "tools": [
         "clear_cache",
         "list_cache"
       ],
-      "description": "报告缓存管理（**本组非纯读**）：list_cache 列缓存清单（只读）；clear_cache 逐出缓存文件（**destructive**，可全清）。缓存在 pod 本地磁盘，清掉只影响后续取数速度，不丢任何库内数据。"
+      "notes": "缓存管理（清缓存 / 看缓存）。运维面误入 commercial，2026-11-25 降为 internal——无任何 pack 引用。"
     },
     {
       "group": "indicator_rules",
@@ -461,12 +468,12 @@
     },
     {
       "group": "rule_audit",
-      "level": "commercial",
+      "level": "internal",
       "tools": [
         "audit_rule_gaps",
         "open_industry_rules_dashboard"
       ],
-      "description": "规则库治理面（**本组非纯读**，运维性质）：audit_rule_gaps 扫描 out/ 抽取包并**写**审计 JSON 产物；open_industry_rules_dashboard 在 pod 本地**起**一个dashboard HTTP 服务（有副作用，不可幂等）。两工具面向本仓维护者，调用方少用。"
+      "notes": "规则缺口审计 + 运维看板（起本地 web 服务）。运维面误入 commercial，2026-11-25 降为 internal——无任何 pack 引用。"
     }
   ],
   "registry": {
